@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveSession } from '@/lib/lti'
 import { supabase } from '@/lib/supabase'
