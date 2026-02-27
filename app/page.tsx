@@ -313,15 +313,31 @@ export default function UserNeedsApp() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const token = params.get('session')
+
     if (token) {
+      // LTI session from Moodle
       setSessionToken(token)
-      // Fetch current usage
       fetch(`/api/usage?session=${token}`)
         .then(r => r.json())
         .then(d => { if (d.remaining !== undefined) setRemaining(d.remaining) })
         .catch(() => {})
+      setLoadingSession(false)
+    } else {
+      // No LTI session — create a guest session automatically
+      fetch('/api/dev-session')
+        .then(r => r.json())
+        .then(d => {
+          if (d.token) {
+            setSessionToken(d.token)
+            fetch(`/api/usage?session=${d.token}`)
+              .then(r => r.json())
+              .then(u => { if (u.remaining !== undefined) setRemaining(u.remaining) })
+              .catch(() => {})
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoadingSession(false))
     }
-    setLoadingSession(false)
   }, [])
 
   if (loadingSession) {
@@ -332,19 +348,9 @@ export default function UserNeedsApp() {
     )
   }
 
-  if (!sessionToken) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-6">
-        <div className="bg-white rounded-2xl shadow-xl p-12 max-w-md text-center">
-          <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
-            <FileText className="w-8 h-8 text-blue-600" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-3">BBC User Needs Tools</h1>
-          <p className="text-gray-600">Please access this tool through your Moodle course to continue.</p>
-        </div>
-      </div>
-    )
-  }
+  // No session = use a shared guest token stored in module scope
+  // (LTI will replace this later)
+  
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
@@ -385,10 +391,10 @@ export default function UserNeedsApp() {
           </div>
         </div>
 
-        {activeTab === 'analyser'
+        {sessionToken && (activeTab === 'analyser'
           ? <Analyser sessionToken={sessionToken} onUse={setRemaining} />
           : <StoryIdeation sessionToken={sessionToken} onUse={setRemaining} />
-        }
+        )}
       </div>
     </div>
   )
