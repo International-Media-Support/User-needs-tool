@@ -2,12 +2,18 @@ import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { supabase } from './supabase'
 import { v4 as uuidv4 } from 'uuid'
 
-const JWKS = createRemoteJWKSet(
-  new URL(process.env.LTI_PLATFORM_JWKS_URL!)
-)
+// Lazy — only created when verifyLtiToken is actually called (not at module load)
+let JWKS: ReturnType<typeof createRemoteJWKSet> | null = null
+
+function getJWKS() {
+  if (!JWKS) {
+    JWKS = createRemoteJWKSet(new URL(process.env.LTI_PLATFORM_JWKS_URL!))
+  }
+  return JWKS
+}
 
 export async function verifyLtiToken(idToken: string) {
-  const { payload } = await jwtVerify(idToken, JWKS, {
+  const { payload } = await jwtVerify(idToken, getJWKS(), {
     issuer: process.env.LTI_PLATFORM_ISSUER,
     audience: process.env.LTI_CLIENT_ID,
   })
