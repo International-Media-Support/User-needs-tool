@@ -326,13 +326,13 @@ export default function UserNeedsApp() {
       // No LTI session — create a guest session automatically
       fetch('/api/dev-session')
         .then(r => r.json())
-        .then(d => {
+        .then(async d => {
           if (d.token) {
             setSessionToken(d.token)
-            fetch(`/api/usage?session=${d.token}`)
-              .then(r => r.json())
-              .then(u => { if (u.remaining !== undefined) setRemaining(u.remaining) })
-              .catch(() => {})
+            try {
+              const u = await fetch(`/api/usage?session=${d.token}`).then(r => r.json())
+              if (u.remaining !== undefined) setRemaining(u.remaining)
+            } catch {}
           }
         })
         .catch(() => {})
