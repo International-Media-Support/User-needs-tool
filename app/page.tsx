@@ -324,7 +324,7 @@ export default function UserNeedsApp() {
       setLoadingSession(false)
     } else {
       // No LTI session — reuse existing guest session or create a new one
-      const stored = localStorage.getItem('guestSession')
+      const stored = document.cookie.split('; ').find(r => r.startsWith('guestSession='))?.split('=')[1]
       const initSession = async (token: string) => {
         setSessionToken(token)
         try {
@@ -338,16 +338,15 @@ export default function UserNeedsApp() {
       }
 
       const init = async () => {
-        // Try existing session first
         if (stored) {
           const valid = await initSession(stored)
           if (valid) { setLoadingSession(false); return }
         }
-        // Create new session
         try {
           const d = await fetch('/api/dev-session').then(r => r.json())
           if (d.token) {
-            localStorage.setItem('guestSession', d.token)
+            // Store in cookie for 24 hours
+            document.cookie = `guestSession=${d.token}; max-age=86400; path=/`
             await initSession(d.token)
           }
         } catch {}
