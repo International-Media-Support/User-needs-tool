@@ -30,9 +30,14 @@ export async function POST(req: NextRequest) {
       const sessionToken = await createSession(userId)
 
       const appUrl = process.env.NEXT_PUBLIC_APP_URL!
-      const redirectUrl = new URL('/lti-launch', appUrl)
+      const redirectUrl = new URL(appUrl)
       redirectUrl.searchParams.set('session', sessionToken)
-      return NextResponse.redirect(redirectUrl.toString())
+      
+      // Use HTML redirect to convert POST → GET
+      return new NextResponse(
+        `<html><head><meta http-equiv="refresh" content="0;url=${redirectUrl.toString()}"></head><body>Loading...</body></html>`,
+        { status: 200, headers: { 'Content-Type': 'text/html' } }
+      )
     }
 
     // Step 1: Moodle hits this as the login initiation URL
