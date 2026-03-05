@@ -324,30 +324,12 @@ export default function UserNeedsApp() {
       setLoadingSession(false)
     } else {
       // No LTI session — reuse existing guest session or create a new one
-      const stored = document.cookie.split('; ').find(r => r.startsWith('guestSession='))?.split('=')[1]
-      const initSession = async (token: string) => {
-        setSessionToken(token)
-        try {
-          const u = await fetch(`/api/usage?session=${token}`).then(r => r.json())
-          if (u.remaining !== undefined) {
-            setRemaining(u.remaining)
-            return true
-          }
-        } catch {}
-        return false
-      }
-
       const init = async () => {
-        if (stored) {
-          const valid = await initSession(stored)
-          if (valid) { setLoadingSession(false); return }
-        }
         try {
           const d = await fetch('/api/dev-session').then(r => r.json())
           if (d.token) {
-            // Store in cookie for 24 hours
-            document.cookie = `guestSession=${d.token}; max-age=86400; path=/`
-            await initSession(d.token)
+            setSessionToken(d.token)
+            if (d.remaining !== undefined) setRemaining(d.remaining)
           }
         } catch {}
         setLoadingSession(false)
@@ -364,9 +346,19 @@ export default function UserNeedsApp() {
     )
   }
 
-  // No session = use a shared guest token stored in module scope
-  // (LTI will replace this later)
-  
+  if (!sessionToken) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl shadow-xl p-12 max-w-md text-center">
+          <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
+            <FileText className="w-8 h-8 text-blue-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-3">BBC User Needs Tools</h1>
+          <p className="text-gray-600">Please access this tool through your Moodle course to continue.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
