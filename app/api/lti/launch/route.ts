@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       const sessionToken = await createSession(userId)
 
       const appUrl = process.env.NEXT_PUBLIC_APP_URL!
-      const redirectUrl = new URL(appUrl)
+      const redirectUrl = new URL('/lti-launch', appUrl)
       redirectUrl.searchParams.set('session', sessionToken)
       return NextResponse.redirect(redirectUrl.toString())
     }
