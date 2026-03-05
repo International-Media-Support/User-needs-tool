@@ -13,7 +13,15 @@ export async function POST(req: NextRequest) {
 
     // Step 2: Moodle posts back with id_token — complete the launch
     if (idToken) {
-      const payload = await verifyLtiToken(idToken)
+      let payload
+      try {
+        payload = await verifyLtiToken(idToken)
+      } catch (verifyErr: any) {
+        return new NextResponse(
+          `Token verification failed: ${verifyErr.message} | JWKS URL: ${process.env.LTI_PLATFORM_JWKS_URL} | Issuer: ${process.env.LTI_PLATFORM_ISSUER} | ClientID: ${process.env.LTI_CLIENT_ID}`,
+          { status: 401 }
+        )
+      }
       const moodleUserId = payload.sub!
       const email = (payload['email'] as string) || ''
       const name = (payload['name'] as string) || ''
