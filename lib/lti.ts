@@ -39,7 +39,7 @@ export async function createSession(userId: string): Promise<string> {
   await supabase.from('lti_sessions').insert({
     token,
     user_id: userId,
-    expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
   })
   return token
 }

@@ -323,20 +323,37 @@ export default function UserNeedsApp() {
         .catch(() => {})
       setLoadingSession(false)
     } else {
-      // No LTI session — create a guest session automatically
-      fetch('/api/dev-session')
-        .then(r => r.json())
-        .then(async d => {
-          if (d.token) {
-            setSessionToken(d.token)
-            try {
-              const u = await fetch(`/api/usage?session=${d.token}`).then(r => r.json())
-              if (u.remaining !== undefined) setRemaining(u.remaining)
-            } catch {}
+      // No LTI session — reuse existing guest session or create a new one
+      const stored = localStorage.getItem('guestSession')
+      const initSession = async (token: string) => {
+        setSessionToken(token)
+        try {
+          const u = await fetch(`/api/usage?session=${token}`).then(r => r.json())
+          if (u.remaining !== undefined) {
+            setRemaining(u.remaining)
+            return true
           }
-        })
-        .catch(() => {})
-        .finally(() => setLoadingSession(false))
+        } catch {}
+        return false
+      }
+
+      const init = async () => {
+        // Try existing session first
+        if (stored) {
+          const valid = await initSession(stored)
+          if (valid) { setLoadingSession(false); return }
+        }
+        // Create new session
+        try {
+          const d = await fetch('/api/dev-session').then(r => r.json())
+          if (d.token) {
+            localStorage.setItem('guestSession', d.token)
+            await initSession(d.token)
+          }
+        } catch {}
+        setLoadingSession(false)
+      }
+      init()
     }
   }, [])
 
