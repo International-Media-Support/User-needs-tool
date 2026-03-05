@@ -54,9 +54,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.redirect(moodleAuthUrl.toString())
 
-  } catch (err) {
+  } catch (err: any) {
     console.error('LTI launch error:', err)
-    return new NextResponse('LTI authentication failed. Please try launching from Moodle again.', { status: 401 })
+    // Show the actual error message so we can debug
+    return new NextResponse(
+      `LTI authentication failed: ${err.message || JSON.stringify(err)}`,
+      { status: 401 }
+    )
   }
 }
 
