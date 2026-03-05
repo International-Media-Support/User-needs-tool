@@ -370,12 +370,14 @@ export default function UserNeedsApp() {
           </div>
 
           <div className="flex gap-2 border-b border-gray-200 mb-6">
-            {([['analyser', 'Content Analyser', Sparkles, 'blue'], ['ideation', 'Story Ideation', Lightbulb, 'purple']] as const).map(([id, label, Icon, color]) => (
-              <button key={id} onClick={() => setActiveTab(id as any)}
-                className={`px-6 py-3 font-semibold transition-colors flex items-center gap-2 ${activeTab === id ? `text-${color}-600 border-b-2 border-${color}-600` : 'text-gray-600 hover:text-gray-900'}`}>
-                <Icon className="w-5 h-5" />{label}
-              </button>
-            ))}
+            <button onClick={() => setActiveTab('analyser')}
+              className={`px-6 py-3 font-semibold transition-colors flex items-center gap-2 ${activeTab === 'analyser' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900'}`}>
+              <Sparkles className="w-5 h-5" />Content Analyser
+            </button>
+            <button onClick={() => setActiveTab('ideation')}
+              className={`px-6 py-3 font-semibold transition-colors flex items-center gap-2 ${activeTab === 'ideation' ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-600 hover:text-gray-900'}`}>
+              <Lightbulb className="w-5 h-5" />Story Ideation
+            </button>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
