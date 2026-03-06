@@ -312,9 +312,12 @@ export default function UserNeedsApp() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const token = params.get('session')
+    const urlToken = params.get('session')
+    const storedToken = sessionStorage.getItem('sessionToken')
+    const token = urlToken || storedToken
 
     if (token) {
+      if (urlToken) sessionStorage.setItem('sessionToken', urlToken)
       setSessionToken(token)
       fetch(`/api/usage?session=${token}`)
         .then(r => r.json())
