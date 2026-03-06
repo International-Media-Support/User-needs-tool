@@ -315,14 +315,17 @@ export default function UserNeedsApp() {
     const urlToken = params.get('session')
 
     if (urlToken) {
-      // Always prefer fresh LTI token from Moodle
+      const urlRemaining = params.get('remaining')
       sessionStorage.setItem('sessionToken', urlToken)
       setSessionToken(urlToken)
-      fetch(`/api/usage?session=${urlToken}`)
-        .then(r => r.json())
-        .then(d => { if (d.remaining !== undefined) setRemaining(d.remaining) })
-        .catch(() => {})
-    } else {
+      if (urlRemaining !== null) {
+        setRemaining(parseInt(urlRemaining))
+      } else {
+        fetch(`/api/usage?session=${urlToken}`)
+          .then(r => r.json())
+          .then(d => { if (d.remaining !== undefined) setRemaining(d.remaining) })
+          .catch(() => {})
+      }    } else {
       // No URL token — check sessionStorage for existing LTI session
       const storedToken = sessionStorage.getItem('sessionToken')
       if (storedToken) {

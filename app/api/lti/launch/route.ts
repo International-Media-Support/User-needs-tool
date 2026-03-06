@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyLtiToken, getOrCreateUser, createSession } from '@/lib/lti'
+import { verifyLtiToken, getOrCreateUser, createSession, checkUsage } from '@/lib/lti'
 
 // Handles BOTH the OIDC login initiation AND the final id_token post
 // This works when Moodle has /api/lti/launch set as the Initiate login URL
@@ -17,10 +17,7 @@ export async function POST(req: NextRequest) {
       try {
         payload = await verifyLtiToken(idToken)
       } catch (verifyErr: any) {
-        return new NextResponse(
-          `Token verification failed: ${verifyErr.message} | JWKS URL: ${process.env.LTI_PLATFORM_JWKS_URL} | Issuer: ${process.env.LTI_PLATFORM_ISSUER} | ClientID: ${process.env.LTI_CLIENT_ID}`,
-          { status: 401 }
-        )
+        return new NextResponse('LTI authentication failed. Please try launching from Moodle again.', { status: 401 })
       }
       const moodleUserId = payload.sub!
       const email = (payload['email'] as string) || ''
@@ -28,12 +25,13 @@ export async function POST(req: NextRequest) {
 
       const userId = await getOrCreateUser(moodleUserId, email, name)
       const sessionToken = await createSession(userId)
+      const remaining = await checkUsage(userId)
 
       const appUrl = process.env.NEXT_PUBLIC_APP_URL!
       const redirectUrl = new URL(appUrl)
       redirectUrl.searchParams.set('session', sessionToken)
-      
-      // Use HTML redirect to convert POST → GET
+      redirectUrl.searchParams.set('remaining', String(remaining))
+
       return new NextResponse(
         `<html><head><meta http-equiv="refresh" content="0;url=${redirectUrl.toString()}"></head><body>Loading...</body></html>`,
         { status: 200, headers: { 'Content-Type': 'text/html' } }
