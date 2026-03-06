@@ -313,16 +313,25 @@ export default function UserNeedsApp() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const urlToken = params.get('session')
-    const storedToken = sessionStorage.getItem('sessionToken')
-    const token = urlToken || storedToken
 
-    if (token) {
-      if (urlToken) sessionStorage.setItem('sessionToken', urlToken)
-      setSessionToken(token)
-      fetch(`/api/usage?session=${token}`)
+    if (urlToken) {
+      // Always prefer fresh LTI token from Moodle
+      sessionStorage.setItem('sessionToken', urlToken)
+      setSessionToken(urlToken)
+      fetch(`/api/usage?session=${urlToken}`)
         .then(r => r.json())
         .then(d => { if (d.remaining !== undefined) setRemaining(d.remaining) })
         .catch(() => {})
+    } else {
+      // No URL token — check sessionStorage for existing LTI session
+      const storedToken = sessionStorage.getItem('sessionToken')
+      if (storedToken) {
+        setSessionToken(storedToken)
+        fetch(`/api/usage?session=${storedToken}`)
+          .then(r => r.json())
+          .then(d => { if (d.remaining !== undefined) setRemaining(d.remaining) })
+          .catch(() => {})
+      }
     }
     setLoadingSession(false)
   }, [])
