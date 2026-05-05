@@ -361,7 +361,7 @@ export default function UserNeedsApp() {
                 <FileText className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">BBC User Needs Tools</h1>
+                <h1 className="text-3xl font-bold text-gray-900">User Needs Tools</h1>
                 <p className="text-gray-600">Content Analyser & Story Ideation</p>
               </div>
             </div>
