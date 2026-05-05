@@ -14,7 +14,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "User Need",
+  title: "User Needs Tool",
   description: "Analyzer and Idea generator",
 };
 
