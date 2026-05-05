@@ -14,7 +14,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "BBC User Need",
+  title: "User Need",
   description: "Analyzer and Idea generator",
 };
 
