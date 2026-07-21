@@ -2,6 +2,9 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveSession, checkAndIncrementUsage } from '@/lib/lti'
+import { getBearerToken } from '@/lib/session'
+
+const MAX_BRIEF_CHARS = 5000
 
 const IMS_DEFINITIONS = `1. Update Me - Traditional breaking news journalism. Answers: What just happened? Sticks to WHO, WHAT, WHEN, WHERE. Formats: breaking news stories, news briefs, live blogs, flash alerts, news roundups.
 
@@ -44,10 +47,18 @@ Rate strength based on: how naturally topic fits need, how compelling, likelihoo
 
 export async function POST(req: NextRequest) {
   try {
-    const { brief, sessionToken } = await req.json()
+    const { brief } = await req.json()
 
-    if (!brief || !sessionToken) {
-      return NextResponse.json({ error: 'Missing brief or session' }, { status: 400 })
+    if (!brief || typeof brief !== 'string') {
+      return NextResponse.json({ error: 'Missing brief' }, { status: 400 })
+    }
+    if (brief.length > MAX_BRIEF_CHARS) {
+      return NextResponse.json({ error: `Brief too long (max ${MAX_BRIEF_CHARS} characters).` }, { status: 400 })
+    }
+
+    const sessionToken = getBearerToken(req)
+    if (!sessionToken) {
+      return NextResponse.json({ error: 'No session. Please re-launch from Moodle.' }, { status: 401 })
     }
 
     const userId = await resolveSession(sessionToken)

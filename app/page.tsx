@@ -38,8 +38,8 @@ function Analyser({ sessionToken, onUse }: { sessionToken: string; onUse: (remai
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, sessionToken })
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+        body: JSON.stringify({ text })
       })
       const data = await res.json()
 
@@ -173,8 +173,8 @@ function StoryIdeation({ sessionToken, onUse }: { sessionToken: string; onUse: (
     try {
       const res = await fetch('/api/ideate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brief, sessionToken })
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+        body: JSON.stringify({ brief })
       })
       const data = await res.json()
 
@@ -311,32 +311,51 @@ export default function UserNeedsApp() {
   const [loadingSession, setLoadingSession] = useState(true)
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const urlToken = params.get('session')
+    const url = new URL(window.location.href)
+    const code = url.searchParams.get('code')
 
-    if (urlToken) {
-      const urlRemaining = params.get('remaining')
-      sessionStorage.setItem('sessionToken', urlToken)
-      setSessionToken(urlToken)
-      if (urlRemaining !== null) {
-        setRemaining(parseInt(urlRemaining))
+    const validate = (token: string) =>
+      fetch('/api/usage', { headers: { 'Authorization': `Bearer ${token}` } })
+        .then(async r => {
+          if (r.ok) {
+            const d = await r.json()
+            setSessionToken(token)
+            if (d.remaining !== undefined) setRemaining(d.remaining)
+          } else {
+            sessionStorage.removeItem('sessionToken')
+          }
+        })
+        .catch(() => {})
+
+    if (code) {
+      // Swap the one-time launch code for the session, then remove it from the URL.
+      fetch('/api/session/exchange', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      })
+        .then(async r => {
+          if (r.ok) {
+            const d = await r.json()
+            sessionStorage.setItem('sessionToken', d.session)
+            setSessionToken(d.session)
+            if (d.remaining !== undefined) setRemaining(d.remaining)
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          url.searchParams.delete('code')
+          window.history.replaceState({}, '', url.pathname + url.search)
+          setLoadingSession(false)
+        })
+    } else {
+      const stored = sessionStorage.getItem('sessionToken')
+      if (stored) {
+        validate(stored).finally(() => setLoadingSession(false))
       } else {
-        fetch(`/api/usage?session=${urlToken}`)
-          .then(r => r.json())
-          .then(d => { if (d.remaining !== undefined) setRemaining(d.remaining) })
-          .catch(() => {})
-      }    } else {
-      // No URL token — check sessionStorage for existing LTI session
-      const storedToken = sessionStorage.getItem('sessionToken')
-      if (storedToken) {
-        setSessionToken(storedToken)
-        fetch(`/api/usage?session=${storedToken}`)
-          .then(r => r.json())
-          .then(d => { if (d.remaining !== undefined) setRemaining(d.remaining) })
-          .catch(() => {})
+        setLoadingSession(false)
       }
     }
-    setLoadingSession(false)
   }, [])
 
   if (loadingSession) {
@@ -397,8 +416,7 @@ export default function UserNeedsApp() {
           : <StoryIdeation sessionToken={sessionToken} onUse={setRemaining} />
         ) : (
           <div className="bg-white rounded-2xl shadow-xl p-8 flex items-center justify-center gap-3 text-gray-500">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            <span>Loading session...</span>
+            <span>Please launch the tool from Moodle to begin.</span>
           </div>
         )}
       </div>

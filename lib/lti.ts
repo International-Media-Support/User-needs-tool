@@ -20,6 +20,52 @@ export async function verifyLtiToken(idToken: string) {
   return payload
 }
 
+// --- OIDC login state (CSRF + replay protection) ---
+// state and nonce are issued during login initiation and validated on the
+// launch callback. Stored server-side, one-time use, short-lived.
+export async function storeLaunchState(state: string, nonce: string) {
+  await supabase.from('lti_launch_state').insert({ state, nonce })
+}
+
+export async function consumeLaunchState(state: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('lti_launch_state')
+    .select('nonce, expires_at')
+    .eq('state', state)
+    .single()
+
+  // One-time use: always delete, whether valid or not.
+  await supabase.from('lti_launch_state').delete().eq('state', state)
+
+  if (!data) return null
+  if (new Date(data.expires_at) < new Date()) return null
+  return data.nonce as string
+}
+
+// --- One-time launch handoff (iframe-safe session delivery) ---
+// The launch redirect carries a single-use, short-lived code instead of the
+// session token. The client swaps it here for the real session.
+export async function createHandoff(sessionToken: string): Promise<string> {
+  const code = uuidv4()
+  await supabase.from('lti_handoff').insert({ code, session_token: sessionToken })
+  return code
+}
+
+export async function consumeHandoff(code: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('lti_handoff')
+    .select('session_token, expires_at')
+    .eq('code', code)
+    .single()
+
+  // One-time use: always delete.
+  await supabase.from('lti_handoff').delete().eq('code', code)
+
+  if (!data) return null
+  if (new Date(data.expires_at) < new Date()) return null
+  return data.session_token as string
+}
+
 export async function getOrCreateUser(moodleUserId: string, email: string, name: string) {
   const { data, error } = await supabase
     .from('users')

@@ -2,6 +2,9 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveSession, checkAndIncrementUsage } from '@/lib/lti'
+import { getBearerToken } from '@/lib/session'
+
+const MAX_TEXT_CHARS = 20000
 
 const IMS_DEFINITIONS = `1. Update Me - Traditional breaking news journalism. Answers: What just happened? Sticks to WHO, WHAT, WHEN, WHERE. Formats: breaking news stories, news briefs, live blogs, flash alerts, news roundups.
 
@@ -50,10 +53,18 @@ secondary_recommendations: 0-2 optional suggestions for incorporating other comp
 
 export async function POST(req: NextRequest) {
   try {
-    const { text, sessionToken } = await req.json()
+    const { text } = await req.json()
 
-    if (!text || !sessionToken) {
-      return NextResponse.json({ error: 'Missing text or session' }, { status: 400 })
+    if (!text || typeof text !== 'string') {
+      return NextResponse.json({ error: 'Missing text' }, { status: 400 })
+    }
+    if (text.length > MAX_TEXT_CHARS) {
+      return NextResponse.json({ error: `Text too long (max ${MAX_TEXT_CHARS} characters).` }, { status: 400 })
+    }
+
+    const sessionToken = getBearerToken(req)
+    if (!sessionToken) {
+      return NextResponse.json({ error: 'No session. Please re-launch from Moodle.' }, { status: 401 })
     }
 
     const userId = await resolveSession(sessionToken)

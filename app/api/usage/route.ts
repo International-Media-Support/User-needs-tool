@@ -2,11 +2,12 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveSession } from '@/lib/lti'
+import { getBearerToken } from '@/lib/session'
 import { supabase } from '@/lib/supabase'
 
 export async function GET(req: NextRequest) {
   try {
-    const token = req.nextUrl.searchParams.get('session')
+    const token = getBearerToken(req)
     if (!token) {
       return NextResponse.json({ error: 'No session token' }, { status: 401 })
     }
