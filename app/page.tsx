@@ -416,7 +416,7 @@ export default function UserNeedsApp() {
           : <StoryIdeation sessionToken={sessionToken} onUse={setRemaining} />
         ) : (
           <div className="bg-white rounded-2xl shadow-xl p-8 flex items-center justify-center gap-3 text-gray-500">
-            <span>Please launch the tool from Moodle to begin.</span>
+            <span>Please launch the tool from IMSLearn to begin.</span>
           </div>
         )}
       </div>
