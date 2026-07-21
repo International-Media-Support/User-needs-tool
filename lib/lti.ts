@@ -122,21 +122,34 @@ export async function checkAndIncrementUsage(
 ): Promise<{ allowed: boolean; remaining: number }> {
   const limit = parseInt(process.env.DAILY_LIMIT || '20')
 
-  const startOfDay = new Date()
-  startOfDay.setHours(0, 0, 0, 0)
+  // Atomic: the database counts and inserts under a per-user advisory lock,
+  // so concurrent requests cannot both slip past the daily limit.
+  const { data, error } = await supabase.rpc('increment_usage', {
+    p_user_id: userId,
+    p_feature: feature,
+    p_limit: limit,
+  })
+  if (error) throw error
 
-  const { count } = await supabase
-    .from('usage')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .gte('used_at', startOfDay.toISOString())
-
-  const used = count || 0
-
-  if (used >= limit) {
+  const remaining = data as number
+  if (remaining < 0) {
     return { allowed: false, remaining: 0 }
   }
+  return { allowed: true, remaining }
+}
 
-  await supabase.from('usage').insert({ user_id: userId, feature })
-  return { allowed: true, remaining: limit - used - 1 }
+// Per-route rate limit. Returns true if the call is within the limit for the
+// window (and records it), false if the caller should be throttled.
+export async function checkRateLimit(
+  bucket: string,
+  limit: number,
+  windowSeconds: number
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc('check_rate_limit', {
+    p_bucket: bucket,
+    p_limit: limit,
+    p_window_seconds: windowSeconds,
+  })
+  if (error) throw error
+  return data as boolean
 }

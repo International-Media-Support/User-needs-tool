@@ -1,9 +1,11 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { resolveSession, checkAndIncrementUsage } from '@/lib/lti'
+import { resolveSession, checkRateLimit, checkAndIncrementUsage } from '@/lib/lti'
 import { getBearerToken } from '@/lib/session'
 
+const RATE_LIMIT = 10           // requests
+const RATE_WINDOW_SECONDS = 60  // per minute, per user
 const MAX_TEXT_CHARS = 20000
 
 const IMS_DEFINITIONS = `1. Update Me - Traditional breaking news journalism. Answers: What just happened? Sticks to WHO, WHAT, WHEN, WHERE. Formats: breaking news stories, news briefs, live blogs, flash alerts, news roundups.
@@ -70,6 +72,14 @@ export async function POST(req: NextRequest) {
     const userId = await resolveSession(sessionToken)
     if (!userId) {
       return NextResponse.json({ error: 'Invalid or expired session. Please re-launch from Moodle.' }, { status: 401 })
+    }
+
+    const withinRate = await checkRateLimit(`analyser:${userId}`, RATE_LIMIT, RATE_WINDOW_SECONDS)
+    if (!withinRate) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please wait a moment and try again.' },
+        { status: 429 }
+      )
     }
 
     const { allowed, remaining } = await checkAndIncrementUsage(userId, 'analyser')
