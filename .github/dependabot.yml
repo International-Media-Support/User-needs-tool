@@ -1,0 +1,9 @@
+# Dependabot version updates
+# Target path in the repo: .github/dependabot.yml
+# Monthly dependency-update PRs for the npm project at the repo root.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "monthly"
