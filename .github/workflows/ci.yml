@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Reports lint findings without failing the run, so it never blocks a
+      # deploy. Re-enabling lint as a hard gate is a separate decision.
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+        continue-on-error: true

@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# User Needs Tool
 
-## Getting Started
+An internal tool that scores and generates story ideas against the BBC User
+Needs Model. Launched from Moodle via LTI 1.3; two AI features (analyser and
+ideation) call the Anthropic API server-side.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Next.js 14 (App Router), React 18, TypeScript
+- Tailwind CSS, Recharts
+- Supabase (managed PostgreSQL) for persistence
+- Auth: Moodle LTI 1.3 (OIDC) verified with `jose`
+- Hosted on Vercel
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Architecture
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `app/api/lti/launch` handles OIDC login initiation and the id_token
+  callback. State and nonce are issued with `crypto.randomUUID`, stored
+  server-side in `lti_launch_state`, and validated one-time on callback.
+- The session is delivered to the browser through a one-time, short-lived
+  handoff code (`lti_handoff`), swapped for the session token at
+  `app/api/session/exchange`. This avoids third-party cookies inside the
+  Moodle iframe and keeps the token out of the URL.
+- `app/api/lti/jwks` publishes only the public signing key.
+- `app/api/analyze` and `app/api/ideate` validate the Bearer session, enforce
+  a per-user per-minute rate limit and the daily usage limit (atomic, via a
+  Postgres advisory-locked function), cap input size, then call Anthropic.
+- Row Level Security is enabled on every table with service-only policies; all
+  access is server-side with the service-role key.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Data model
 
-## Learn More
+- `users` — moodle_user_id, email, name
+- `usage` — user_id, used_at, feature
+- `lti_sessions` — token, user_id, expires_at
+- `lti_launch_state` — state, nonce, expires_at (OIDC CSRF/replay)
+- `lti_handoff` — code, session_token, expires_at (session delivery)
+- `rate_limit` — bucket, created_at (per-route limiting)
 
-To learn more about Next.js, take a look at the following resources:
+Schema lives in `supabase/schema.sql` plus `supabase/migrations/*`. Expired
+ephemeral rows are purged by scheduled jobs in `0004_retention.sql`. The DSAR
+export/erasure procedure is in `supabase/dsar.sql`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Environment variables
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+- `ANTHROPIC_API_KEY`
+- `LTI_PRIVATE_KEY`, `LTI_PLATFORM_JWKS_URL`, `LTI_PLATFORM_ISSUER`, `LTI_CLIENT_ID`
+- `NEXT_PUBLIC_APP_URL`
+- `DAILY_LIMIT` (default 20)
 
-## Deploy on Vercel
+## Deploy
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Push to `main` deploys via Vercel's Git integration. CI (`.github/workflows`)
+runs lint, a dependency audit, and CodeQL analysis.
