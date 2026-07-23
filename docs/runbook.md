@@ -57,6 +57,11 @@ Set in Vercel project settings. None are committed.
 - `cron-check.yml`: daily. Verifies the expected pg_cron jobs exist and are
   active, turning an otherwise silent retention failure into an email. If it
   fails, re-apply migrations 0004 and 0005.
+- `smoke.yml`: daily. Probes the deployed app from outside and asserts that
+  /api/analyze, /api/ideate and /api/usage all reject unauthenticated callers
+  with 401, that health reports ok, and that the JWKS endpoint exposes no
+  private key material. Consumes no Anthropic quota. Requires the APP_URL
+  variable.
 - `keepalive.yml`: pings the database every 3 days so the free Supabase project
   does not pause after 7 days idle. **Interim measure only. Delete it once the
   database is on Supabase Pro.** It requires a repository secret
@@ -162,9 +167,19 @@ internal user id.
 Deliberately never logged: session tokens, handoff codes, OIDC state or nonce,
 any user-submitted content, keys or connection strings.
 
-Retention is still the gap: Vercel's free-plan log retention is short, so these
-lines are structured but not durable. Shipping them to a log sink remains
-outstanding.
+Retention now has two tiers:
+- Full detail, including the internal user id, in the Vercel function logs.
+  Short retention on the free plan.
+- Durable daily counters in `security_events_daily` (migration 0006), holding
+  day, event, route and a count. No user identifier, so the table is not
+  personal data and needs no DSAR handling. Purged after 12 months.
+
+The counters answer "is something anomalous happening"; they cannot answer
+"who did it". Per-user forensics beyond the Vercel retention window would need
+a real log sink. To review:
+
+    select * from security_events_daily
+    where day > current_date - 14 order by day desc, count desc;
 
 ## 10. Monitoring
 

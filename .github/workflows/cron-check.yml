@@ -34,7 +34,7 @@ jobs:
 
           # purge-usage-daily is deliberately excluded: it stays disabled until
           # a retention period is agreed for the aggregated counts.
-          expected="purge-lti-sessions purge-lti-launch-state purge-lti-handoff purge-rate-limit rollup-usage"
+          expected="purge-lti-sessions purge-lti-launch-state purge-lti-handoff purge-rate-limit rollup-usage purge-security-events"
 
           actual=$(docker run --rm -e PGCONN="$SUPABASE_DB_URL" postgres:17 \
             psql "$PGCONN" -tAc \

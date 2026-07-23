@@ -48,6 +48,22 @@ describe('security logging', () => {
     const src = readSource('lib/log.ts')
     expect(src).not.toMatch(/sessionToken|bearer|\btext\b\s*[,}]/i)
   })
+
+  it('durable counters carry no user identifier', () => {
+    // security_events_daily is deliberately non-personal. If a user id were
+    // ever added, it would need DSAR handling and an erasure cascade.
+    const migration = readSource('supabase/migrations/0006_security_events.sql')
+    const table = migration.slice(
+      migration.indexOf('create table if not exists security_events_daily'),
+      migration.indexOf('alter table security_events_daily')
+    )
+    expect(table).not.toMatch(/user_id/)
+
+    // The RPC call must pass only event and route.
+    const log = readSource('lib/log.ts')
+    const call = log.slice(log.indexOf('record_security_event'))
+    expect(call).not.toMatch(/userId/)
+  })
 })
 
 describe('.env.example', () => {

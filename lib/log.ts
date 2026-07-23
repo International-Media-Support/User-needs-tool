@@ -14,10 +14,22 @@
  * The internal user id (a UUID) is logged deliberately: it is the pseudonymous
  * key needed for an audit trail, and it is meaningless without database access.
  *
- * NOTE ON RETENTION: Vercel's function logs are short-lived on the free plan,
- * so this gives structure but not durable retention. Shipping these lines to a
- * durable sink is still outstanding.
+ * RETENTION: two tiers, on purpose.
+ *   - The JSON line below goes to stdout and is captured in Vercel's function
+ *     logs. It carries the full detail including the internal user id, but
+ *     retention is short on the free plan.
+ *   - A daily counter is also written to security_events_daily (migration
+ *     0006), which is durable. It records only day, event and route, with no
+ *     user identifier, so it answers "is something anomalous happening" but
+ *     not "who did it". See the migration for why it aggregates.
+ *
+ * The database write is awaited: on serverless, work not awaited before the
+ * response may never run. It only happens on failure paths (401 and 429), not
+ * on the happy path, so it adds no latency to normal use. Failures are
+ * swallowed, because logging must never break a request.
  */
+
+import { supabase } from '@/lib/supabase'
 
 export type SecurityEvent =
   | 'auth_no_token'
@@ -32,7 +44,7 @@ interface SecurityDetails {
   status: number
 }
 
-export function logSecurityEvent(event: SecurityEvent, details: SecurityDetails) {
+export async function logSecurityEvent(event: SecurityEvent, details: SecurityDetails) {
   try {
     console.log(
       JSON.stringify({
@@ -43,6 +55,15 @@ export function logSecurityEvent(event: SecurityEvent, details: SecurityDetails)
       })
     )
   } catch {
-    // Logging must never break a request.
+    // Never break a request over a log line.
+  }
+
+  try {
+    await supabase.rpc('record_security_event', {
+      p_event: event,
+      p_route: details.route,
+    })
+  } catch {
+    // Durable counters are best-effort; the stdout line above is the fallback.
   }
 }

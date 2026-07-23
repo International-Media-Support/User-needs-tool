@@ -1,0 +1,91 @@
+name: Smoke test
+
+# Checks the deployed application from outside, which the unit tests cannot do.
+# The unit tests assert properties of the source; this asserts that the thing
+# actually running enforces authentication.
+#
+# The important assertion is the 401: it confirms that an unauthenticated
+# caller cannot reach the analyse or ideate endpoints in production. If a
+# refactor ever removed a session check, CI could still pass while the live
+# tool was wide open. This is what catches that.
+#
+# No Anthropic quota is consumed: the requests are rejected at the session
+# check, well before the API call.
+#
+# Requires the APP_URL repository variable (same one uptime.yml uses).
+
+on:
+  schedule:
+    - cron: '15 7 * * *'
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe the deployment
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          set -uo pipefail
+          if [ -z "${APP_URL:-}" ]; then
+            echo "APP_URL repository variable is not set (Settings > Secrets and variables > Actions > Variables)."
+            exit 1
+          fi
+          fail=0
+
+          check() {
+            local desc="$1" expected="$2" actual="$3"
+            if [ "$actual" = "$expected" ]; then
+              echo "  ok    $desc (HTTP $actual)"
+            else
+              echo "  FAIL  $desc: expected HTTP $expected, got $actual"
+              fail=1
+            fi
+          }
+
+          echo "Probing $APP_URL"
+
+          code=$(curl -sS -o /tmp/h -w '%{http_code}' --max-time 20 "$APP_URL/api/health" || echo 000)
+          check "health endpoint responds" 200 "$code"
+          grep -q '"status":"ok"' /tmp/h 2>/dev/null \
+            && echo "  ok    health reports ok" \
+            || { echo "  FAIL  health did not report ok: $(cat /tmp/h 2>/dev/null)"; fail=1; }
+
+          # No Authorization header: must be rejected.
+          for route in analyze ideate; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 \
+              -X POST "$APP_URL/api/$route" \
+              -H 'Content-Type: application/json' \
+              -d '{"text":"smoke test","brief":"smoke test"}' || echo 000)
+            check "/api/$route rejects unauthenticated request" 401 "$code"
+          done
+
+          # Well-formed but invalid bearer token: must also be rejected.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 \
+            -X POST "$APP_URL/api/analyze" \
+            -H 'Content-Type: application/json' \
+            -H 'Authorization: Bearer not-a-real-session-token' \
+            -d '{"text":"smoke test"}' || echo 000)
+          check "/api/analyze rejects an invalid session token" 401 "$code"
+
+          # Usage endpoint should also require a session.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 \
+            "$APP_URL/api/usage" || echo 000)
+          check "/api/usage requires a session" 401 "$code"
+
+          # JWKS is public by design and must expose only a public key.
+          body=$(curl -sS --max-time 20 "$APP_URL/api/lti/jwks" || echo '')
+          if echo "$body" | grep -qiE '"d"[[:space:]]*:|PRIVATE KEY'; then
+            echo "  FAIL  JWKS endpoint appears to expose private key material"
+            fail=1
+          else
+            echo "  ok    JWKS exposes no private key material"
+          fi
+
+          echo
+          if [ "$fail" != "0" ]; then
+            echo "Smoke test FAILED."
+            exit 1
+          fi
+          echo "Smoke test passed."

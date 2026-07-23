@@ -1,0 +1,4 @@
+# The User Needs Tool is an internal tool reached through Moodle via LTI.
+# It has no public content and should not appear in search results.
+User-agent: *
+Disallow: /
