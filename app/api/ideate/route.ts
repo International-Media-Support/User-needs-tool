@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveSession, checkRateLimit, checkAndIncrementUsage } from '@/lib/lti'
 import { getBearerToken } from '@/lib/session'
+import { logSecurityEvent } from '@/lib/log'
 
 const RATE_LIMIT = 10           // requests
 const RATE_WINDOW_SECONDS = 60  // per minute, per user
@@ -60,16 +61,19 @@ export async function POST(req: NextRequest) {
 
     const sessionToken = getBearerToken(req)
     if (!sessionToken) {
+      logSecurityEvent('auth_no_token', { route: 'ideate', status: 401 })
       return NextResponse.json({ error: 'No session. Please re-launch from Moodle.' }, { status: 401 })
     }
 
     const userId = await resolveSession(sessionToken)
     if (!userId) {
+      logSecurityEvent('auth_invalid_session', { route: 'ideate', status: 401 })
       return NextResponse.json({ error: 'Invalid or expired session. Please re-launch from Moodle.' }, { status: 401 })
     }
 
     const withinRate = await checkRateLimit(`ideation:${userId}`, RATE_LIMIT, RATE_WINDOW_SECONDS)
     if (!withinRate) {
+      logSecurityEvent('rate_limited', { route: 'ideate', userId, status: 429 })
       return NextResponse.json(
         { error: 'Too many requests. Please wait a moment and try again.' },
         { status: 429 }
@@ -78,6 +82,7 @@ export async function POST(req: NextRequest) {
 
     const { allowed, remaining } = await checkAndIncrementUsage(userId, 'ideation')
     if (!allowed) {
+      logSecurityEvent('usage_limit_reached', { route: 'ideate', userId, status: 429 })
       return NextResponse.json(
         { error: 'You have used all 20 analyses for today. Come back tomorrow!' },
         { status: 429 }

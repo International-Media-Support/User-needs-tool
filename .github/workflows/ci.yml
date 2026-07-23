@@ -21,6 +21,12 @@ jobs:
       - name: Lint
         run: npm run lint
         continue-on-error: true
+      # Blocking on purpose: these tests guard compliance claims (content is
+      # never persisted, no name or email is stored) and need no secrets or
+      # network, so a failure is a real regression rather than flakiness.
+      - name: Tests
+        run: npm test
+
       - name: Dependency audit
         run: npm audit --audit-level=high
         continue-on-error: true

@@ -49,6 +49,14 @@ Set in Vercel project settings. None are committed.
 - `uptime.yml`: polls `/api/health` every 30 minutes. A failed run is the alert
   (GitHub emails watchers on failure). Requires a repository **variable**
   `APP_URL` set to the production origin, no trailing slash.
+- `restore-verify.yml`: weekly. Dumps the live database, round-trips it through
+  the real BACKUP_PASSPHRASE, restores into a throwaway PostgreSQL container and
+  asserts the expected tables and functions came back. Nothing is written to the
+  live database and no artifact is produced. A failure means the backups would
+  not actually restore.
+- `cron-check.yml`: daily. Verifies the expected pg_cron jobs exist and are
+  active, turning an otherwise silent retention failure into an email. If it
+  fails, re-apply migrations 0004 and 0005.
 - `keepalive.yml`: pings the database every 3 days so the free Supabase project
   does not pause after 7 days idle. **Interim measure only. Delete it once the
   database is on Supabase Pro.** It requires a repository secret
@@ -143,6 +151,20 @@ To stand up a database from scratch (new project, restore, or scratch copy):
    usage_daily rollup).
 4. Verify the scheduled jobs exist: `select jobname, active from cron.job;`
    Scheduled jobs are not restored by a database dump. See the DR plan.
+
+## 9b. Security logging
+
+Auth failures, rate limiting and usage-limit hits are emitted as single-line
+JSON from `lib/log.ts`, tagged `"kind":"security"`, and captured in the Vercel
+function logs. Fields are the event, route, HTTP status and, where known, the
+internal user id.
+
+Deliberately never logged: session tokens, handoff codes, OIDC state or nonce,
+any user-submitted content, keys or connection strings.
+
+Retention is still the gap: Vercel's free-plan log retention is short, so these
+lines are structured but not durable. Shipping them to a log sink remains
+outstanding.
 
 ## 10. Monitoring
 

@@ -1,0 +1,102 @@
+name: Restore verification
+
+# Proves the backup chain actually works, end to end, once a week.
+#
+# Backups that have never been restored are an assumption, not a safeguard.
+# This exercises every link: dump the live database, encrypt it with the real
+# BACKUP_PASSPHRASE secret, decrypt it again, restore into a throwaway
+# PostgreSQL container, and assert the expected tables and functions came back.
+# A wrong passphrase, a broken dump or a schema that will not reload all fail
+# here rather than during an incident.
+#
+# Nothing is written back to the live database, and no artifact is produced;
+# the decrypted copy exists only inside the runner and dies with it.
+#
+# Requires the same secrets as backup.yml: SUPABASE_DB_URL, BACKUP_PASSPHRASE.
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start throwaway PostgreSQL
+        run: |
+          set -euo pipefail
+          docker network create verifynet
+          docker run -d --name pgtarget --network verifynet \
+            -e POSTGRES_PASSWORD=postgres postgres:17
+          for i in $(seq 1 30); do
+            if docker run --rm --network verifynet postgres:17 \
+                 pg_isready -h pgtarget -U postgres >/dev/null 2>&1; then
+              echo "target ready"; break
+            fi
+            sleep 2
+          done
+
+      - name: Dump, encrypt, decrypt, restore
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ] || [ -z "${BACKUP_PASSPHRASE:-}" ]; then
+            echo "SUPABASE_DB_URL and BACKUP_PASSPHRASE must both be set."
+            exit 1
+          fi
+
+          docker run --rm -e PGCONN="$SUPABASE_DB_URL" postgres:17 \
+            sh -c 'pg_dump "$PGCONN" --no-owner --no-privileges' > dump.sql
+          test -s dump.sql
+          echo "dump bytes: $(wc -c < dump.sql)"
+
+          # Round-trip through the real passphrase, so a wrong or rotated
+          # secret is caught here.
+          gpg --batch --yes --symmetric --cipher-algo AES256 \
+            --passphrase "$BACKUP_PASSPHRASE" -o dump.sql.gpg dump.sql
+          rm -f dump.sql
+          gpg --batch --yes --decrypt \
+            --passphrase "$BACKUP_PASSPHRASE" -o restored.sql dump.sql.gpg
+          test -s restored.sql
+
+          # pg_cron is a Supabase-managed extension and is not available in the
+          # stock postgres image, so its CREATE EXTENSION line is stripped. This
+          # mirrors reality: scheduled jobs never travel with a dump and are
+          # re-applied from migrations 0004 and 0005 after a restore.
+          grep -viE 'EXTENSION [^;]*pg_cron' restored.sql > restore.filtered.sql
+
+          docker run --rm -i --network verifynet -e PGPASSWORD=postgres postgres:17 \
+            psql -h pgtarget -U postgres -d postgres \
+            -v ON_ERROR_STOP=1 -f - < restore.filtered.sql
+
+      - name: Assert schema restored
+        run: |
+          set -euo pipefail
+          q() {
+            docker run --rm --network verifynet -e PGPASSWORD=postgres postgres:17 \
+              psql -h pgtarget -U postgres -d postgres -tAc "$1"
+          }
+          missing=0
+          for t in users usage usage_daily lti_sessions lti_launch_state lti_handoff rate_limit; do
+            got=$(q "select to_regclass('public.$t') is not null")
+            if [ "$got" != "t" ]; then echo "MISSING TABLE: $t"; missing=1; else echo "table ok: $t"; fi
+          done
+          for f in increment_usage check_rate_limit get_usage_count rollup_usage; do
+            got=$(q "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='$f'")
+            if [ "$got" = "0" ]; then echo "MISSING FUNCTION: $f"; missing=1; else echo "function ok: $f"; fi
+          done
+          if [ "$missing" != "0" ]; then
+            echo "Restore verification FAILED: the backup does not reproduce the expected schema."
+            exit 1
+          fi
+          echo "Restore verification passed."
+
+      - name: Clean up
+        if: always()
+        run: |
+          rm -f dump.sql dump.sql.gpg restored.sql restore.filtered.sql || true
+          docker rm -f pgtarget >/dev/null 2>&1 || true
+          docker network rm verifynet >/dev/null 2>&1 || true

@@ -4,16 +4,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { resolveSession } from '@/lib/lti'
 import { getBearerToken } from '@/lib/session'
 import { supabase } from '@/lib/supabase'
+import { logSecurityEvent } from '@/lib/log'
 
 export async function GET(req: NextRequest) {
   try {
     const token = getBearerToken(req)
     if (!token) {
+      logSecurityEvent('auth_no_token', { route: 'usage', status: 401 })
       return NextResponse.json({ error: 'No session token' }, { status: 401 })
     }
 
     const userId = await resolveSession(token)
     if (!userId) {
+      logSecurityEvent('auth_invalid_session', { route: 'usage', status: 401 })
       return NextResponse.json({ error: 'Invalid or expired session' }, { status: 401 })
     }
 

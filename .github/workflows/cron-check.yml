@@ -1,0 +1,65 @@
+name: Scheduled jobs check
+
+# Retention and rollup run as pg_cron jobs inside the database. They fail
+# silently: if the jobs disappear, nothing errors, data simply stops being
+# purged and aggregated, and the first sign is a bloated table weeks later.
+#
+# They disappear more easily than expected. pg_cron jobs live in the `cron`
+# schema, which is not captured by a database dump, so any restore or project
+# move loses them unless migrations 0004 and 0005 are re-applied.
+#
+# This turns that silent failure into an email: a failed run notifies
+# repository watchers.
+#
+# Requires the SUPABASE_DB_URL secret (already used by keepalive.yml).
+
+on:
+  schedule:
+    - cron: '30 5 * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify expected cron jobs are present and active
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "SUPABASE_DB_URL is not set."
+            exit 1
+          fi
+
+          # purge-usage-daily is deliberately excluded: it stays disabled until
+          # a retention period is agreed for the aggregated counts.
+          expected="purge-lti-sessions purge-lti-launch-state purge-lti-handoff purge-rate-limit rollup-usage"
+
+          actual=$(docker run --rm -e PGCONN="$SUPABASE_DB_URL" postgres:17 \
+            psql "$PGCONN" -tAc \
+            "select jobname from cron.job where active" 2>/dev/null || true)
+
+          if [ -z "$actual" ]; then
+            echo "Could not read cron.job, or no active jobs exist."
+            echo "If the database was restored or moved, re-apply migrations 0004 and 0005."
+            exit 1
+          fi
+
+          echo "Active jobs found:"; echo "$actual" | sed 's/^/  /'
+
+          missing=0
+          for job in $expected; do
+            if ! echo "$actual" | grep -qx "$job"; then
+              echo "MISSING or INACTIVE: $job"
+              missing=1
+            fi
+          done
+
+          if [ "$missing" != "0" ]; then
+            echo
+            echo "Retention is not fully running. Re-apply migrations 0004 and 0005"
+            echo "in the Supabase SQL Editor, then re-run this workflow."
+            exit 1
+          fi
+          echo "All expected scheduled jobs are active."
