@@ -1,0 +1,48 @@
+name: Uptime
+
+# Polls the health endpoint every 6 hours. A failed run is the alert: GitHub
+# emails repository watchers on workflow failure.
+#
+# THIS IS A STOPGAP, not real uptime monitoring. Two reasons to replace it with
+# a dedicated external service (UptimeRobot and similar have free tiers):
+#
+#   1. Cost. Actions are unmetered on public repositories but metered on
+#      private ones, billed per job ROUNDED UP to the minute. At a 30-minute
+#      interval this job alone would burn ~1,440 minutes/month, about 72% of
+#      the 2,000-minute Free allowance, for a four-second curl. Hence 6 hours.
+#      If the monthly quota is exhausted, ALL workflows stop, including the
+#      database backup, and nothing announces it.
+#   2. Accuracy. Scheduled workflows are queued on a best-effort basis and are
+#      often delayed, and this check runs from inside GitHub rather than from
+#      where users are.
+#
+# Requires a repository VARIABLE (not a secret) named APP_URL, set to the
+# production origin with no trailing slash, e.g. https://tool.example.org
+# Settings > Secrets and variables > Actions > Variables tab.
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check health endpoint
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "APP_URL repository variable is not set. See the comment at the top of this workflow."
+            exit 1
+          fi
+          code=$(curl -sS -o /tmp/body -w '%{http_code}' --max-time 20 "$APP_URL/api/health" || echo 000)
+          echo "HTTP $code"
+          cat /tmp/body 2>/dev/null || true
+          echo
+          if [ "$code" != "200" ]; then
+            echo "Health check failed."
+            exit 1
+          fi
+          echo "Healthy."

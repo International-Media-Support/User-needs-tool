@@ -1,0 +1,71 @@
+name: Backup
+
+# Daily encrypted database dump, retained as a workflow artifact.
+#
+# INTERIM MEASURE. This exists because the free Supabase plan keeps no backups
+# at all. Supabase Pro provides automated daily backups and point-in-time
+# recovery, which is the proper solution; delete this workflow once on Pro.
+#
+# WHY THE ENCRYPTION IS NOT OPTIONAL: the dump contains moodle_user_id values
+# and usage history, which are personal data even though no name or email is
+# stored. While this repository is public, artifacts can be downloaded by
+# anyone, which makes encryption essential. It stays essential after the
+# repository is made private: artifacts remain readable by everyone with repo
+# access, and an unencrypted database dump should not sit in a code host in
+# either case. The plaintext never leaves the runner.
+#
+# ON A PRIVATE REPOSITORY: Actions minutes and artifact storage become metered
+# (Free plan: 2,000 min and 500 MB; Team: 3,000 min and 2 GB). If the quota is
+# exhausted this workflow stops running and no backups are taken, silently.
+# Check quota usage periodically, or move to Supabase Pro and delete this.
+#
+# Required secrets (Settings > Secrets and variables > Actions):
+#   SUPABASE_DB_URL   - session pooler connection string (already used by keepalive)
+#   BACKUP_PASSPHRASE - a long random passphrase, stored somewhere durable.
+#                       Lose this and the backups are unrecoverable.
+#
+# To restore:
+#   gpg --batch --decrypt --passphrase "<BACKUP_PASSPHRASE>" \
+#       -o backup.sql backup-YYYY-MM-DD.sql.gpg
+#   psql "<TARGET_DB_URL>" -f backup.sql
+# Then re-apply migrations 0004 and 0005: scheduled jobs are not in the dump.
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump and encrypt
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ] || [ -z "${BACKUP_PASSPHRASE:-}" ]; then
+            echo "SUPABASE_DB_URL and BACKUP_PASSPHRASE must both be set."
+            exit 1
+          fi
+          stamp=$(date -u +%Y-%m-%d)
+          # pg_dump runs in a pinned container so the client version cannot
+          # drift from the server version on the runner image.
+          docker run --rm -e PGCONN="$SUPABASE_DB_URL" postgres:17 \
+            sh -c 'pg_dump "$PGCONN" --no-owner --no-privileges' > backup.sql
+          test -s backup.sql
+          gpg --batch --yes --symmetric --cipher-algo AES256 \
+            --passphrase "$BACKUP_PASSPHRASE" \
+            -o "backup-${stamp}.sql.gpg" backup.sql
+          shred -u backup.sql 2>/dev/null || rm -f backup.sql
+          echo "Encrypted backup written: backup-${stamp}.sql.gpg"
+          ls -la backup-*.sql.gpg
+
+      - name: Upload encrypted artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup
+          path: 'backup-*.sql.gpg'
+          retention-days: 30
+          if-no-files-found: error

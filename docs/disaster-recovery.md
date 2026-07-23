@@ -27,12 +27,18 @@ Moodle LTI registration than on the database contents.
 
 Set these against section 0. Validate them with a restore test (section 6).
 
-## 1. Current honest position
+## 1. Current position
 
-There is at present **no backup**. Until one exists, the effective RPO is
-unbounded: a database loss would lose all usage_daily history permanently.
-Everything else in the table above regenerates. Closing this is the single
-highest-value item in this plan.
+A daily encrypted dump now runs via the `backup.yml` workflow, retained for 30
+days as a workflow artifact. That puts the effective RPO at roughly 24 hours,
+bounded by the daily schedule, and the retention window at 30 days.
+
+Caveats worth holding in mind:
+- It is an interim measure. Supabase Pro provides automated daily backups and
+  point-in-time recovery, which is the proper solution.
+- Recovery depends entirely on `BACKUP_PASSPHRASE`. If that is lost, every
+  artifact is unrecoverable. Store it separately from the repository.
+- Artifacts expire after 30 days, so there is no long-term archive.
 
 ## 2. What can fail and the response
 
@@ -45,11 +51,15 @@ highest-value item in this plan.
 
 ## 3. Backups
 
-- Now (free): a manual or scheduled pg_dump stored in a controlled,
-  access-limited location. The dump no longer contains names or email addresses
+- Now (free, in place): the `backup.yml` workflow runs a daily pg_dump,
+  encrypts it with AES256 before it is written anywhere, and uploads it as a
+  30-day artifact. The dump no longer contains names or email addresses
   (removed in 0005), but it does contain moodle_user_id and usage history, which
-  remain personal data in pseudonymous form. Store it encrypted and restrict
-  access.
+  remain personal data in pseudonymous form. This repository is public and
+  artifacts on public repositories are downloadable by anyone, so the encryption
+  is what makes this acceptable, not an optional extra.
+- To restore: decrypt with `gpg --batch --decrypt --passphrase "<passphrase>"`,
+  then apply with psql. See the header of `.github/workflows/backup.yml`.
 - Recommended: move the database to Supabase Pro for automated daily backups and
   point-in-time recovery. This removes the manual step and is the reliable path.
 - [FILL: chosen backup method, location, schedule and retention.]
@@ -59,7 +69,8 @@ highest-value item in this plan.
 1. Create or select the target Supabase project. If new, choose the same region.
 2. Enable the pg_cron extension (Database > Extensions).
 3. Apply `supabase/schema.sql`, then `supabase/migrations/*` in numerical order.
-4. Restore data from the latest dump, if one exists.
+4. Restore data from the latest dump: download the newest `db-backup` artifact,
+   decrypt it with BACKUP_PASSPHRASE, and apply it with psql.
 5. Re-run the scheduled-job setup and verify it (section 5). Do not assume the
    restore brought the jobs back.
 6. Update NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel, and

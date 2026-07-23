@@ -26,7 +26,18 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
-.env*.local
+# Broadened from the create-next-app default (.env*.local), which would not
+# have caught a plain .env or .env.production. This repository is public, so a
+# committed env file would expose the service-role key, the LTI signing key and
+# the Anthropic API key immediately.
+.env
+.env.*
+!.env.example
+
+# database dumps (may contain personal data)
+*.sql.gpg
+backup*.sql
+dump*.sql
 
 # vercel
 .vercel

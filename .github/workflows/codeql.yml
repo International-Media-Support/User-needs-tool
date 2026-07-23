@@ -1,3 +1,11 @@
+# NOTE: code scanning is free on PUBLIC repositories only. On a private
+# repository it requires GitHub Code Security (part of Advanced Security), which
+# needs a Team or Enterprise plan and is a paid add-on. When this repository is
+# made private, this workflow will stop producing alerts unless that is
+# purchased. If it is not, delete this workflow and rely on npm audit in ci.yml
+# plus Dependabot alerts, and record the reduced coverage in the compliance
+# document.
+
 name: CodeQL
 
 on:

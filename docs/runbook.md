@@ -40,12 +40,48 @@ Set in Vercel project settings. None are committed.
 
 - `ci.yml`: lint and dependency audit on push and pull request (reporting only).
 - `codeql.yml`: code scanning on push and weekly.
+- `backup.yml`: daily encrypted pg_dump, retained 30 days as a workflow
+  artifact. Requires `SUPABASE_DB_URL` and `BACKUP_PASSPHRASE` secrets.
+  Encryption is mandatory because this repository is public and artifacts on a
+  public repository are downloadable by anyone. **Interim only; delete once on
+  Supabase Pro.** Losing BACKUP_PASSPHRASE makes every backup unrecoverable, so
+  store it somewhere durable and separate.
+- `uptime.yml`: polls `/api/health` every 30 minutes. A failed run is the alert
+  (GitHub emails watchers on failure). Requires a repository **variable**
+  `APP_URL` set to the production origin, no trailing slash.
 - `keepalive.yml`: pings the database every 3 days so the free Supabase project
   does not pause after 7 days idle. **Interim measure only. Delete it once the
   database is on Supabase Pro.** It requires a repository secret
   `SUPABASE_DB_URL` (session-pooler connection string). If the database password
   is rotated, update this secret or the workflow fails silently and the project
   can pause.
+
+## 4b. Making the repository private
+
+The repository is currently public so that external tooling can read it. It is
+intended to become private. Three things change on that switch, and the first
+two need a decision before flipping it:
+
+1. **Code scanning stops.** CodeQL is free on public repositories only. On a
+   private repository it requires GitHub Code Security (Advanced Security), a
+   paid add-on needing Team or Enterprise. Either buy it, or delete
+   `codeql.yml`, rely on `npm audit` and Dependabot alerts, and record the
+   reduced coverage in the compliance document. Dependabot itself, both version
+   updates and security alerts, keeps working on private repositories.
+2. **Actions minutes become metered.** Unmetered on public repositories; on
+   private ones the Free plan includes 2,000 Linux minutes per month and Team
+   3,000, billed per job rounded up to the minute. Current workflows are
+   estimated at roughly 380 minutes per month after the uptime interval was
+   widened to 6 hours. The failure mode matters: with the default zero spending
+   limit, exhausting the quota stops ALL workflows, including the database
+   backup, with no announcement. Check usage in the organisation billing
+   settings after the switch.
+3. **Artifact storage becomes metered.** 500 MB on Free, 2 GB on Team. The
+   backup workflow keeps 30 daily encrypted dumps; the database is small, so
+   this should fit, but it is worth confirming once real usage accumulates.
+
+Unchanged: encryption of backups is still required, since artifacts are
+readable by everyone with repository access either way.
 
 ## 5. Data inventory
 
