@@ -68,10 +68,11 @@ export async function POST(req: NextRequest) {
       }
 
       const moodleUserId = payload.sub!
-      const email = (payload['email'] as string) || ''
-      const name = (payload['name'] as string) || ''
 
-      const userId = await getOrCreateUser(moodleUserId, email, name)
+      // Deliberately not reading email/name from the launch payload: they are
+      // not needed for the usage limit or feature analysis, so they are not
+      // collected or stored.
+      const userId = await getOrCreateUser(moodleUserId)
       const sessionToken = await createSession(userId)
       const code = await createHandoff(sessionToken)
 

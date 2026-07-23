@@ -18,16 +18,17 @@ export async function GET(req: NextRequest) {
     }
 
     const limit = parseInt(process.env.DAILY_LIMIT || '20')
-    const startOfDay = new Date()
-    startOfDay.setHours(0, 0, 0, 0)
 
-    const { count } = await supabase
-      .from('usage')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('used_at', startOfDay.toISOString())
+    // Counted in SQL by get_usage_count, which uses the same day boundary as
+    // increment_usage. Keeping one definition means the number shown here
+    // cannot drift from the number actually enforced.
+    const { data, error } = await supabase.rpc('get_usage_count', {
+      p_user_id: userId
+    })
 
-    const used = count || 0
+    if (error) throw error
+
+    const used = data || 0
 
     return NextResponse.json({
       used,

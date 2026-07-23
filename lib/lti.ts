@@ -66,11 +66,11 @@ export async function consumeHandoff(code: string): Promise<string | null> {
   return data.session_token as string
 }
 
-export async function getOrCreateUser(moodleUserId: string, email: string, name: string) {
+export async function getOrCreateUser(moodleUserId: string) {
   const { data, error } = await supabase
     .from('users')
     .upsert(
-      { moodle_user_id: moodleUserId, email, name },
+      { moodle_user_id: moodleUserId },
       { onConflict: 'moodle_user_id' }
     )
     .select('id')

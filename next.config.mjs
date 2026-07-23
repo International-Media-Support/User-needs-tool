@@ -1,8 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   // Security headers. Deliberately no X-Frame-Options / frame-ancestors here:
   // the tool must remain embeddable in the Moodle iframe. HSTS omits
   // includeSubDomains/preload to avoid affecting sibling subdomains; add them

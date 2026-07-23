@@ -30,16 +30,20 @@ ideation) call the Anthropic API server-side.
 
 ## Data model
 
-- `users` — moodle_user_id, email, name
-- `usage` — user_id, used_at, feature
+- `users` - moodle_user_id only (pseudonymous; no email or name is collected)
+- `usage` - user_id, used_at, feature (current day only; older rows are aggregated)
+- `usage_daily` - user_id, day, feature, count (historical usage as counts)
 - `lti_sessions` — token, user_id, expires_at
 - `lti_launch_state` — state, nonce, expires_at (OIDC CSRF/replay)
 - `lti_handoff` — code, session_token, expires_at (session delivery)
 - `rate_limit` — bucket, created_at (per-route limiting)
 
-Schema lives in `supabase/schema.sql` plus `supabase/migrations/*`. Expired
-ephemeral rows are purged by scheduled jobs in `0004_retention.sql`. The DSAR
-export/erasure procedure is in `supabase/dsar.sql`.
+Schema lives in `supabase/schema.sql` plus `supabase/migrations/*`, applied in
+order. Expired ephemeral rows are purged by scheduled jobs in
+`0004_retention.sql`. `0005_minimise_and_aggregate.sql` drops the unused
+email/name columns, adds `get_usage_count()` so the daily window is defined once
+in SQL, and rolls completed days into `usage_daily`. The DSAR export/erasure
+procedure is in `supabase/dsar.sql`.
 
 ## Environment variables
 

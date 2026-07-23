@@ -1,0 +1,136 @@
+# User Needs Tool: Operational Runbook
+
+Living operational reference. Keep it current as the system changes. 
+
+## 1. Ownership and accounts
+
+- Source: github.com/International-Media-Support/User-needs-tool (organisation-owned).
+- Hosting: Vercel (https://vercel.com/international-media-support/bbc-user-needs)
+- Database: Supabase, IMS-owned account. (https://qtqonkrlvpgzgkmdqppf.supabase.co), Ireland.]
+- AI: Anthropic API. 
+- Admin access is via the organisation accounts, not tied to one individual. [Admin:Pranjal Garg]
+
+## 2. Environments and URLs
+
+- Production URL: https://bbc-user-needs.vercel.app/
+- Deploys are push-to-`main` via Vercel's Git integration.
+
+
+
+## 3. Environment variables
+
+Set in Vercel project settings. None are committed.
+
+- NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+- ANTHROPIC_API_KEY
+- LTI_PRIVATE_KEY (RSA private signing key; server-only)
+- LTI_PLATFORM_JWKS_URL, LTI_PLATFORM_ISSUER, LTI_CLIENT_ID
+- NEXT_PUBLIC_APP_URL
+- DAILY_LIMIT (default 20)
+
+## 4. Providers and plans
+
+| Provider  | Purpose            | Current plan        | Notes                                  |
+|-----------|--------------------|---------------------|----------------------------------------|
+| Vercel    | Hosting            | Hobby               | Non-commercial licence; move to Pro.   |
+| Supabase  | PostgreSQL         | Free                | Pauses when idle (see 4a); Pro adds backups. |
+| Anthropic | AI (analyse/ideate)| Pay as you go       | Primary variable cost.                 |
+
+## 4a. Scheduled workflows (GitHub Actions)
+
+- `ci.yml`: lint and dependency audit on push and pull request (reporting only).
+- `codeql.yml`: code scanning on push and weekly.
+- `keepalive.yml`: pings the database every 3 days so the free Supabase project
+  does not pause after 7 days idle. **Interim measure only. Delete it once the
+  database is on Supabase Pro.** It requires a repository secret
+  `SUPABASE_DB_URL` (session-pooler connection string). If the database password
+  is rotated, update this secret or the workflow fails silently and the project
+  can pause.
+
+## 5. Data inventory
+
+- users: moodle_user_id, created_at. No email or name is collected (removed in
+  migration 0005), so the record is pseudonymous.
+- usage: user_id, used_at, feature. Holds the current day only.
+- usage_daily: user_id, day, feature, count. Historical usage as counts.
+- lti_sessions, lti_launch_state, lti_handoff, rate_limit: short-lived operational rows.
+- Content pasted for analysis or ideation is sent to Anthropic and is not stored.
+
+Purposes: the data supports enforcing the daily usage limit and per-user
+feature analysis. Nothing is collected beyond what those two purposes need.
+
+## 6. Data retention
+
+- Expired session, launch-state and handoff rows and stale rate-limit rows are
+  purged by pg_cron jobs (supabase/migrations/0004_retention.sql). Requires
+  pg_cron enabled in Supabase.
+- Raw usage rows are rolled up nightly into usage_daily by rollup_usage() and
+  then deleted, so the raw table only ever holds the current day. Do not also
+  enable the commented-out 'purge-usage' job in 0004: it deletes without
+  aggregating.
+- usage_daily still carries user_id and so remains personal data, though far
+  less granular. [Retention period for usage_daily not set yet but configured in purge-usage-daily job in 0005. Set timeline , then enable the purge-usage-daily job in 0005 for purging periodically.]
+
+## 7. Data subject requests (DSAR)
+
+- Export and erasure SQL by moodle_user_id: supabase/dsar.sql, run in the SQL
+  Editor. Erasure cascades from users to both usage and usage_daily.
+- Note the export is small by design: no name or email is held, so a subject
+  access response is the moodle_user_id, the current day's usage rows, and the
+  historical per-day feature counts.
+
+## 8. Key rotation
+
+- LTI signing key: rotating requires generating a new key
+  (scripts/generate-lti-key.mjs), updating LTI_PRIVATE_KEY, and confirming the
+  JWKS endpoint serves the new public key to Moodle. [FILL: cadence.]
+- Supabase service-role key and Anthropic API key: rotate in the respective
+  dashboards and update Vercel env quarterly.
+
+## 9. Deploy and rollback
+
+- Deploy: push to `main`. CI runs lint, dependency audit and CodeQL.
+- ESLint runs during `next build`, so a lint error fails the deploy. The
+  `@typescript-eslint/no-explicit-any` rule is set to warn (ten known instances
+  in app/page.tsx), so those surface without blocking.
+- Rollback: in the Vercel dashboard, promote the previous successful deployment.
+
+## 9a. Applying the database schema
+
+To stand up a database from scratch (new project, restore, or scratch copy):
+
+1. Enable the `pg_cron` extension (Database > Extensions).
+2. In the SQL Editor run `supabase/schema.sql`.
+3. Then run each file in `supabase/migrations/` in numerical order:
+   0001 (lti_launch_state), 0002 (lti_handoff), 0003 (rate limiting and atomic
+   usage), 0004 (retention purges), 0005 (minimisation, get_usage_count,
+   usage_daily rollup).
+4. Verify the scheduled jobs exist: `select jobname, active from cron.job;`
+   Scheduled jobs are not restored by a database dump. See the DR plan.
+
+## 10. Monitoring
+
+- Vercel dashboard metrics and function logs (short retention on the free plan).
+- Implent error tracking (Sentry), and Anthropic spend alerts
+
+## 11. Capacity ceilings and upgrade triggers
+
+- Supabase Free: 500 MB database, 50k MAU. Trigger: approach either limit ->
+  Supabase Pro.
+- Vercel Hobby: 100 GB bandwidth, ~60s function limit, non-commercial licence.
+  Trigger: organisational/commercial use or bandwidth pressure -> Vercel Pro.
+- Anthropic: per-user daily limit (DAILY_LIMIT) bounds spend. Trigger: raise the
+  limit or add caching as usage grows.
+
+## 12. Exit strategy
+
+The stack is portable: Next.js on any Node host, standard PostgreSQL, code in
+GitHub. To exit a provider: export the database with pg_dump, redeploy the app
+to the alternative host, restore the dump, and re-point environment variables.
+Re-apply migrations 0004 and 0005 afterwards, since scheduled jobs do not travel
+with a dump (section 9a). The only dependency that is not plain PostgreSQL is
+pg_cron; on a host without it, run the purge and rollup SQL from an external
+scheduler instead.
+## 13. Support
+
+- Pranjal Garg or User Needs Tool IT Lead
