@@ -37,13 +37,23 @@ jobs:
           # (migration 0007), so a missing job means over-retention.
           expected="purge-lti-sessions purge-lti-launch-state purge-lti-handoff purge-rate-limit rollup-usage purge-security-events purge-usage-daily"
 
-          actual=$(docker run --rm -e PGCONN="$SUPABASE_DB_URL" postgres:17 \
-            psql "$PGCONN" -tAc \
-            "select jobname from cron.job where active" 2>/dev/null || true)
+          # PGCONN must be expanded by the shell INSIDE the container, not by
+          # this one. Hence sh -c with single quotes: with double quotes (or no
+          # sh -c at all) the runner expands $PGCONN, finds it undefined, and
+          # `set -u` aborts the whole step before psql is ever reached.
+          # backup.yml and restore-verify.yml use the same sh -c form; this
+          # step did not, which is why it could never connect.
+          if ! actual=$(docker run --rm -e PGCONN="$SUPABASE_DB_URL" postgres:17 \
+            sh -c 'psql "$PGCONN" -tAc "select jobname from cron.job where active"' 2>&1); then
+            echo "Could not query the database. psql said:"
+            echo "$actual" | sed 's/^/  /'
+            echo "If the database was restored or moved, re-apply migrations 0004, 0005, 0006 and 0007."
+            exit 1
+          fi
 
           if [ -z "$actual" ]; then
-            echo "Could not read cron.job, or no active jobs exist."
-            echo "If the database was restored or moved, re-apply migrations 0004, 0005, 0006 and 0007."
+            echo "Connected, but no active cron jobs exist."
+            echo "Re-apply migrations 0004, 0005, 0006 and 0007."
             exit 1
           fi
 
