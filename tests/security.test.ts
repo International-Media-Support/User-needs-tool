@@ -26,8 +26,7 @@ describe('data minimisation', () => {
     expect(src).not.toMatch(/\.upsert\(/)
   })
 
-  it('no route stores an email address or name', () => {
-    // Removed in migration 0005. If either reappears, the privacy notice, DPIA
+  it('no route stores an email address or name', () => {    // Removed in migration 0005. If either reappears, the privacy notice, DPIA
     // and DSAR procedure all become wrong.
     const walk = (dir: string): string[] =>
       readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
@@ -40,6 +39,49 @@ describe('data minimisation', () => {
         /(insert|upsert)\(([\s\S]*?)\b(email|name)\b/
       )
     }
+  })
+})
+
+describe('base schema', () => {
+  it('does not declare email or name on users', () => {
+    // The route-level test above catches code that writes these columns. It
+    // does not catch a schema that defines them. Migration 0005 drops both,
+    // but an environment stood up from schema.sql alone would recreate them
+    // and quietly falsify the privacy notice, so guard the schema too.
+    const schema = readSource('supabase/schema.sql')
+    const usersTable = schema.slice(
+      schema.indexOf('create table users'),
+      schema.indexOf('create table usage')
+    )
+    expect(usersTable).not.toMatch(/^\s*email\b/m)
+    expect(usersTable).not.toMatch(/^\s*name\b/m)
+  })
+})
+
+describe('restore verification', () => {
+  it('asserts every table and function the migrations create', () => {
+    // A table added by a migration but never added to restore-verify.yml is a
+    // table whose loss during a restore would go undetected.
+    const workflow = readSource('.github/workflows/restore-verify.yml')
+    const sqlDir = 'supabase/migrations'
+    const sql = [readSource('supabase/schema.sql')]
+      .concat(readdirSync(sqlDir).map((f) => readSource(join(sqlDir, f))))
+      .join('\n')
+
+    const collect = (re: RegExp): string[] => {
+      const found: string[] = []
+      let m: RegExpExecArray | null
+      while ((m = re.exec(sql)) !== null) {
+        if (found.indexOf(m[1]) === -1) found.push(m[1])
+      }
+      return found
+    }
+
+    const tables = collect(/create table (?:if not exists )?(\w+)/g)
+    const functions = collect(/create (?:or replace )?function (\w+)/g)
+
+    const missing = tables.concat(functions).filter((n) => !workflow.includes(n)).sort()
+    expect(missing, `not asserted by restore-verify.yml: ${missing.join(', ')}`).toEqual([])
   })
 })
 

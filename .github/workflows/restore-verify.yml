@@ -5,7 +5,10 @@ name: Restore verification
 # Backups that have never been restored are an assumption, not a safeguard.
 # This exercises every link: dump the live database, encrypt it with the real
 # BACKUP_PASSPHRASE secret, decrypt it again, restore into a throwaway
-# PostgreSQL container, and assert the expected tables and functions came back.
+# PostgreSQL container, and assert that all eight tables and all five functions
+# came back. Keep these lists in step with supabase/migrations: a table added by
+# a migration but not added here is a table whose loss a restore would not
+# detect.
 # A wrong passphrase, a broken dump or a schema that will not reload all fail
 # here rather than during an incident.
 #
@@ -80,11 +83,11 @@ jobs:
               psql -h pgtarget -U postgres -d postgres -tAc "$1"
           }
           missing=0
-          for t in users usage usage_daily lti_sessions lti_launch_state lti_handoff rate_limit; do
+          for t in users usage usage_daily lti_sessions lti_launch_state lti_handoff rate_limit security_events_daily; do
             got=$(q "select to_regclass('public.$t') is not null")
             if [ "$got" != "t" ]; then echo "MISSING TABLE: $t"; missing=1; else echo "table ok: $t"; fi
           done
-          for f in increment_usage check_rate_limit get_usage_count rollup_usage; do
+          for f in increment_usage check_rate_limit get_usage_count rollup_usage record_security_event; do
             got=$(q "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='$f'")
             if [ "$got" = "0" ]; then echo "MISSING FUNCTION: $f"; missing=1; else echo "function ok: $f"; fi
           done

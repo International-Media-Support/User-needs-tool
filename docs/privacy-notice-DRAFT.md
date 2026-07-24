@@ -38,7 +38,10 @@ safeguard: [FILL: e.g. the provider's standard contractual clauses].
 - Operational session data is short-lived and purged automatically.
 - Detailed usage records are kept for the current day only, then reduced to
   per-day counts per feature.
-- Those counts and your account record: [FILL: retention period].
+- Those per-day counts are kept for six months and then deleted automatically.
+- Your account record is the Moodle user identifier and the date it was first
+  seen. It is kept for as long as the tool is in use by your organisation, and
+  is removed on request. [FILL: confirm this wording with legal.]
 
 ## Automated decision-making
 The tool uses AI to score and suggest content. It does not make automated

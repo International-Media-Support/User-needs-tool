@@ -56,15 +56,9 @@ secondary_recommendations: 0-2 optional suggestions for incorporating other comp
 
 export async function POST(req: NextRequest) {
   try {
-    const { text } = await req.json()
-
-    if (!text || typeof text !== 'string') {
-      return NextResponse.json({ error: 'Missing text' }, { status: 400 })
-    }
-    if (text.length > MAX_TEXT_CHARS) {
-      return NextResponse.json({ error: `Text too long (max ${MAX_TEXT_CHARS} characters).` }, { status: 400 })
-    }
-
+    // Session is resolved before the body is read. An unauthenticated caller
+    // should not get any work done on its input, and should get a 401 rather
+    // than a 400 that leaks which validation rules exist.
     const sessionToken = getBearerToken(req)
     if (!sessionToken) {
       await logSecurityEvent('auth_no_token', { route: 'analyze', status: 401 })
@@ -75,6 +69,15 @@ export async function POST(req: NextRequest) {
     if (!userId) {
       await logSecurityEvent('auth_invalid_session', { route: 'analyze', status: 401 })
       return NextResponse.json({ error: 'Invalid or expired session. Please re-launch from Moodle.' }, { status: 401 })
+    }
+
+    const { text } = await req.json()
+
+    if (!text || typeof text !== 'string') {
+      return NextResponse.json({ error: 'Missing text' }, { status: 400 })
+    }
+    if (text.length > MAX_TEXT_CHARS) {
+      return NextResponse.json({ error: `Text too long (max ${MAX_TEXT_CHARS} characters).` }, { status: 400 })
     }
 
     const withinRate = await checkRateLimit(`analyser:${userId}`, RATE_LIMIT, RATE_WINDOW_SECONDS)

@@ -44,7 +44,7 @@ any further risks, are for the assessor.
 | 2 | Unauthorised access to the database | [FILL] | [FILL] | Pseudonymous only: moodle_user_id and usage counts. No name or email held. |
 | 3 | Re-identification of a user from moodle_user_id | [FILL] | [FILL] | Requires access to Moodle to resolve the identifier. |
 | 4 | LTI signing key compromise leading to impersonation | [FILL] | [FILL] | Key held server-side only; rotation procedure documented. |
-| 5 | Loss of availability | [FILL] | [FILL] | No backups currently; most data self-heals. See the DR plan. |
+| 5 | Loss of availability | [FILL] | [FILL] | Daily encrypted backup with 30-day retention, restorability proved weekly. Most data self-heals on the next LTI launch; usage_daily is the only irreplaceable data. See the DR plan. |
 | 6 | Retention failing silently (jobs stopped) leading to over-retention | [FILL] | [FILL] | Scheduled jobs are not restored by a dump; explicit check documented. |
 
 ## 5. Mitigations already in place
@@ -60,8 +60,9 @@ any further risks, are for the assessor.
 - Privacy notice completed and published. [FILL]
 - DPAs executed with Supabase, Vercel and Anthropic. [FILL]
 - Transfer basis for the US processing documented. [FILL]
-- Retention period set for usage_daily, and the purge enabled. [FILL]
-- Backups in place (currently none). [FILL]
+- Retention period set for usage_daily (six months) and the purge enabled in
+  migration 0007. Done.
+- Backups in place: daily encrypted dump, weekly restore verification. Move to Supabase Pro for managed backups and PITR. [FILL: sign-off]
 
 ## 7. Sign-off
 - Prepared by: [FILL]. Date: [FILL].

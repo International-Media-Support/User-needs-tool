@@ -37,6 +37,9 @@ ideation) call the Anthropic API server-side.
 - `lti_launch_state` — state, nonce, expires_at (OIDC CSRF/replay)
 - `lti_handoff` — code, session_token, expires_at (session delivery)
 - `rate_limit` — bucket, created_at (per-route limiting)
+- `security_events_daily` — day, event, route, count. Aggregated security-event
+  counters with no user identifier, so the table is not personal data. Purged
+  after 12 months.
 
 Schema lives in `supabase/schema.sql` plus `supabase/migrations/*`, applied in
 order. Expired ephemeral rows are purged by scheduled jobs in

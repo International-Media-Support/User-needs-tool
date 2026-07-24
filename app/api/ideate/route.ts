@@ -50,15 +50,8 @@ Rate strength based on: how naturally topic fits need, how compelling, likelihoo
 
 export async function POST(req: NextRequest) {
   try {
-    const { brief } = await req.json()
-
-    if (!brief || typeof brief !== 'string') {
-      return NextResponse.json({ error: 'Missing brief' }, { status: 400 })
-    }
-    if (brief.length > MAX_BRIEF_CHARS) {
-      return NextResponse.json({ error: `Brief too long (max ${MAX_BRIEF_CHARS} characters).` }, { status: 400 })
-    }
-
+    // Session is resolved before the body is read, for the same reason as in
+    // the analyse route: no work on unauthenticated input.
     const sessionToken = getBearerToken(req)
     if (!sessionToken) {
       await logSecurityEvent('auth_no_token', { route: 'ideate', status: 401 })
@@ -69,6 +62,15 @@ export async function POST(req: NextRequest) {
     if (!userId) {
       await logSecurityEvent('auth_invalid_session', { route: 'ideate', status: 401 })
       return NextResponse.json({ error: 'Invalid or expired session. Please re-launch from Moodle.' }, { status: 401 })
+    }
+
+    const { brief } = await req.json()
+
+    if (!brief || typeof brief !== 'string') {
+      return NextResponse.json({ error: 'Missing brief' }, { status: 400 })
+    }
+    if (brief.length > MAX_BRIEF_CHARS) {
+      return NextResponse.json({ error: `Brief too long (max ${MAX_BRIEF_CHARS} characters).` }, { status: 400 })
     }
 
     const withinRate = await checkRateLimit(`ideation:${userId}`, RATE_LIMIT, RATE_WINDOW_SECONDS)

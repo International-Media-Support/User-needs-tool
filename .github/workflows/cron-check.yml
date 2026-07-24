@@ -32,9 +32,10 @@ jobs:
             exit 1
           fi
 
-          # purge-usage-daily is deliberately excluded: it stays disabled until
-          # a retention period is agreed for the aggregated counts.
-          expected="purge-lti-sessions purge-lti-launch-state purge-lti-handoff purge-rate-limit rollup-usage purge-security-events"
+          # purge-usage-daily was excluded while the retention period for the
+          # aggregated counts was undecided. It is now set to six months
+          # (migration 0007), so a missing job means over-retention.
+          expected="purge-lti-sessions purge-lti-launch-state purge-lti-handoff purge-rate-limit rollup-usage purge-security-events purge-usage-daily"
 
           actual=$(docker run --rm -e PGCONN="$SUPABASE_DB_URL" postgres:17 \
             psql "$PGCONN" -tAc \
@@ -42,7 +43,7 @@ jobs:
 
           if [ -z "$actual" ]; then
             echo "Could not read cron.job, or no active jobs exist."
-            echo "If the database was restored or moved, re-apply migrations 0004 and 0005."
+            echo "If the database was restored or moved, re-apply migrations 0004, 0005, 0006 and 0007."
             exit 1
           fi
 

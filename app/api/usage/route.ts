@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
 
   } catch (err) {
     console.error('Usage error:', err)
+    await logSecurityEvent('upstream_error', { route: 'usage', status: 500 })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

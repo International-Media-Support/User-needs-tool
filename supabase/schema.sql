@@ -1,9 +1,12 @@
 -- Users table (populated on first LTI login)
+-- Pseudonymous by design. No email or name is collected: neither served either
+-- stated purpose (enforcing the daily limit, per-user feature analysis), and
+-- migration 0005 dropped them. Do not reintroduce them without revising the
+-- privacy notice, the DPIA and the DSAR procedure. A test in tests/ fails if
+-- either column reappears here.
 create table users (
   id uuid primary key default gen_random_uuid(),
   moodle_user_id text unique not null,
-  email text,
-  name text,
   created_at timestamptz default now()
 );
 

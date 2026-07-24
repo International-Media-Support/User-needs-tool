@@ -6,9 +6,11 @@ Living operational reference. Keep it current as the system changes.
 
 - Source: github.com/International-Media-Support/User-needs-tool (organisation-owned).
 - Hosting: Vercel (https://vercel.com/international-media-support/bbc-user-needs)
-- Database: Supabase, IMS-owned account. (https://qtqonkrlvpgzgkmdqppf.supabase.co), Ireland.]
-- AI: Anthropic API. 
-- Admin access is via the organisation accounts, not tied to one individual. [Admin:Pranjal Garg]
+- Database: Supabase, IMS-owned account (https://qtqonkrlvpgzgkmdqppf.supabase.co), region: EU West (Ireland).
+- AI: Anthropic API, IMS-owned account. Account owner: [FILL: role, not an individual].
+- Admin access is via the organisation accounts and is held by role, not by a
+  named individual. Current holders: [FILL: role names]. Review membership
+  whenever someone joins or leaves.
 
 ## 2. Environments and URLs
 
@@ -46,7 +48,10 @@ Set in Vercel project settings. None are committed.
   public repository are downloadable by anyone. **Interim only; delete once on
   Supabase Pro.** Losing BACKUP_PASSPHRASE makes every backup unrecoverable, so
   store it somewhere durable and separate.
-- `uptime.yml`: polls `/api/health` every 30 minutes. A failed run is the alert
+- `uptime.yml`: polls `/api/health` every 6 hours (widened from 30 minutes so
+  that Actions consumption stays inside the free allowance once the repository
+  is private; the trade-off is that an outage can go unnoticed for up to 6
+  hours). A failed run is the alert
   (GitHub emails watchers on failure). Requires a repository **variable**
   `APP_URL` set to the production origin, no trailing slash.
 - `restore-verify.yml`: weekly. Dumps the live database, round-trips it through
@@ -56,7 +61,7 @@ Set in Vercel project settings. None are committed.
   not actually restore.
 - `cron-check.yml`: daily. Verifies the expected pg_cron jobs exist and are
   active, turning an otherwise silent retention failure into an email. If it
-  fails, re-apply migrations 0004 and 0005.
+  fails, re-apply migrations 0004, 0005, 0006 and 0007.
 - `smoke.yml`: daily. Probes the deployed app from outside and asserts that
   /api/analyze, /api/ideate and /api/usage all reject unauthenticated callers
   with 401, that health reports ok, and that the JWKS endpoint exposes no
@@ -118,7 +123,17 @@ feature analysis. Nothing is collected beyond what those two purposes need.
   enable the commented-out 'purge-usage' job in 0004: it deletes without
   aggregating.
 - usage_daily still carries user_id and so remains personal data, though far
-  less granular. [Retention period for usage_daily not set yet but configured in purge-usage-daily job in 0005. Set timeline , then enable the purge-usage-daily job in 0005 for purging periodically.]
+  less granular. **Retention: six months.** Enforced by the `purge-usage-daily`
+  pg_cron job (supabase/migrations/0007_usage_daily_retention.sql), which runs
+  daily at 04:30 and deletes counts older than six months. This is a hard
+  delete with no further aggregation behind it.
+- Security event counters in security_events_daily are purged after 12 months
+  (migration 0006). They carry no user identifier, so they are not personal
+  data.
+- Changing the usage_daily period: re-run `cron.schedule` with the same job
+  name and a different interval, then update this runbook and the privacy
+  notice in the same change. If the documented period and the scheduled job
+  disagree, the documented one is wrong.
 
 ## 7. Data subject requests (DSAR)
 
@@ -153,8 +168,11 @@ To stand up a database from scratch (new project, restore, or scratch copy):
 3. Then run each file in `supabase/migrations/` in numerical order:
    0001 (lti_launch_state), 0002 (lti_handoff), 0003 (rate limiting and atomic
    usage), 0004 (retention purges), 0005 (minimisation, get_usage_count,
-   usage_daily rollup).
+   usage_daily rollup), 0006 (security event counters and their 12-month
+   purge), 0007 (usage_daily six-month retention purge).
 4. Verify the scheduled jobs exist: `select jobname, active from cron.job;`
+   Expect seven: purge-lti-sessions, purge-lti-launch-state, purge-lti-handoff,
+   purge-rate-limit, rollup-usage, purge-security-events, purge-usage-daily.
    Scheduled jobs are not restored by a database dump. See the DR plan.
 
 ## 9b. Security logging
