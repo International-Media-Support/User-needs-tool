@@ -1,0 +1,111 @@
+name: Security anomaly check
+
+# Reads security_events_daily and reports abnormal days.
+#
+# Migration 0006 gave security events a durable home; nothing read them, so an
+# attack in progress produced a row in a table nobody looked at. This is the
+# reading side. The detection logic lives in the database
+# (detect_security_anomalies, migration 0008) rather than here, so it can be
+# tuned or run by hand without editing a workflow.
+#
+# TWO MODES, set by the ANOMALY_ALERT_MODE repository variable:
+#
+#   report  (default) - print findings, always exit 0. Nothing goes red.
+#   enforce           - exit 1 on a finding, so the run fails and notifies.
+#
+# Start in report mode for at least two weeks. Thresholds set from guesswork
+# rather than observed traffic produce false positives, and a workflow that
+# cries wolf gets ignored, which is worse than not having it. Once the normal
+# range is known, tune the thresholds, then switch to enforce.
+#
+# Runs after the 03:00 rollup and the retention purges so the previous day's
+# counters are settled.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      day:
+        description: 'Day to evaluate (YYYY-MM-DD). Defaults to yesterday.'
+        required: false
+      mode:
+        description: 'Override mode for this run'
+        required: false
+        type: choice
+        options: [report, enforce]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for anomalies
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          MODE: ${{ github.event.inputs.mode || vars.ANOMALY_ALERT_MODE || 'report' }}
+          DAY: ${{ github.event.inputs.day }}
+          MULTIPLIER: ${{ vars.ANOMALY_MULTIPLIER || '3.0' }}
+          FLOOR: ${{ vars.ANOMALY_FLOOR || '200' }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "SUPABASE_DB_URL is not set."
+            exit 1
+          fi
+
+          if [ -n "${DAY:-}" ]; then
+            day_arg="'$DAY'::date"
+          else
+            day_arg="current_date - 1"
+          fi
+
+          echo "Mode: $MODE   multiplier: ${MULTIPLIER}x   floor: $FLOOR"
+          echo
+
+          # PGCONN is expanded by the shell INSIDE the container, not by this
+          # one. Hence sh -c with single quotes. Getting this wrong is what
+          # left cron-check.yml silently broken from the day it was written.
+          query="select event || ' on ' || route || ': ' || count ||
+                 ' (baseline avg ' || baseline_avg || ' over ' ||
+                 baseline_days || ' days) - ' || reason
+                 from detect_security_anomalies($day_arg, $MULTIPLIER, $FLOOR);"
+
+          if ! findings=$(docker run --rm -e PGCONN="$SUPABASE_DB_URL" -e Q="$query" postgres:17 \
+            sh -c 'psql "$PGCONN" -tAc "$Q"' 2>&1); then
+            echo "Could not query the database. psql said:"
+            echo "$findings" | sed 's/^/  /'
+            echo
+            echo "If the database was restored or moved, re-apply migrations 0004 to 0008."
+            exit 1
+          fi
+
+          if [ -z "$findings" ]; then
+            echo "No anomalies. Yesterday's security event counts look normal."
+            exit 0
+          fi
+
+          echo "ANOMALIES DETECTED:"
+          echo "$findings" | sed 's/^/  /'
+          echo
+          echo "What to do:"
+          echo "  1. Check whether this is an attack or a change in legitimate use."
+          echo "     A new cohort starting a course looks a lot like abuse."
+          echo "  2. auth_no_token spikes are usually benign: expired tabs, or a"
+          echo "     Moodle course opening to a new group."
+          echo "  3. rate_limited or usage_limit_reached spikes are more"
+          echo "     interesting: the per-user caps are working, but something is"
+          echo "     pushing against them."
+          echo "  4. upstream_error spikes mean the tool is failing, not that it"
+          echo "     is under attack. Check Vercel logs and provider status."
+          echo "  5. Per-user detail is NOT in this table by design. For"
+          echo "     attribution, use the Vercel function logs while they are"
+          echo "     still in retention."
+
+          if [ "$MODE" = "enforce" ]; then
+            exit 1
+          fi
+
+          echo
+          echo "(report mode: not failing the run. Set ANOMALY_ALERT_MODE to"
+          echo " 'enforce' once thresholds are tuned to observed traffic.)"

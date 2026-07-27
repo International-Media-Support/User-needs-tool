@@ -48,6 +48,19 @@ Set in Vercel project settings. None are committed.
   public repository are downloadable by anyone. **Interim only; delete once on
   Supabase Pro.** Losing BACKUP_PASSPHRASE makes every backup unrecoverable, so
   store it somewhere durable and separate.
+- `anomaly-check.yml`: reads security_events_daily each morning at 06:00 and
+  reports (event, route) pairs whose count exceeded either the absolute floor
+  or a multiple of their own trailing 14-day baseline. Detection logic is in
+  the database (`detect_security_anomalies`, migration 0008), so it can be run
+  by hand at any time:
+  `select * from detect_security_anomalies();`
+  Controlled by three repository variables: ANOMALY_ALERT_MODE (`report` or
+  `enforce`, default `report`), ANOMALY_MULTIPLIER (default 3.0) and
+  ANOMALY_FLOOR (default 200). Keep it in `report` mode until the normal range
+  has been observed for at least two weeks, then tune and switch to `enforce`.
+  Note the limits, both inherited from 0006 by design: daily granularity, and
+  no user attribution. For per-user detail use the Vercel function logs while
+  they are still within retention.
 - `uptime.yml`: polls `/api/health` every 6 hours (widened from 30 minutes so
   that Actions consumption stays inside the free allowance once the repository
   is private; the trade-off is that an outage can go unnoticed for up to 6
@@ -169,7 +182,8 @@ To stand up a database from scratch (new project, restore, or scratch copy):
    0001 (lti_launch_state), 0002 (lti_handoff), 0003 (rate limiting and atomic
    usage), 0004 (retention purges), 0005 (minimisation, get_usage_count,
    usage_daily rollup), 0006 (security event counters and their 12-month
-   purge), 0007 (usage_daily six-month retention purge).
+   purge), 0007 (usage_daily six-month retention purge), 0008 (security
+   anomaly detection function and the recent-events view).
 4. Verify the scheduled jobs exist: `select jobname, active from cron.job;`
    Expect seven: purge-lti-sessions, purge-lti-launch-state, purge-lti-handoff,
    purge-rate-limit, rollup-usage, purge-security-events, purge-usage-daily.
