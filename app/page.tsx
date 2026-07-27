@@ -81,6 +81,14 @@ function Analyser({ sessionToken, onUse }: { sessionToken: string; onUse: (remai
         <textarea value={text} onChange={e => setText(e.target.value)}
           placeholder="Paste your article, headline, transcript, or any content here..."
           className="w-full h-64 p-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none resize-none text-gray-800" />
+        {/* Transfer guidance. Required by the transfer impact assessment: the
+            residual risk on the Anthropic transfer is what users choose to
+            paste, and the only effective control is telling them before they
+            paste it. See docs/transfer-impact-assessment.md section 5. */}
+        <p className="mt-2 text-xs text-gray-500">
+          Your text is sent to an AI provider outside the EU to generate a result. It is not stored by this tool.
+          Please do not paste material that must stay in the EU or that could identify a confidential source.
+        </p>
         {error && <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
         <button onClick={analyzeText} disabled={analyzing || !text.trim()}
           className="mt-4 px-8 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
@@ -216,6 +224,11 @@ function StoryIdeation({ sessionToken, onUse }: { sessionToken: string; onUse: (
         <textarea value={brief} onChange={e => setBrief(e.target.value)}
           placeholder="Describe your story topic. E.g. 'Rising electricity costs affecting small businesses in rural areas'"
           className="w-full h-48 p-4 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none resize-none text-gray-800" />
+        {/* See the note on the analyser input above. */}
+        <p className="mt-2 text-xs text-gray-500">
+          Your brief is sent to an AI provider outside the EU to generate a result. It is not stored by this tool.
+          Please do not include material that must stay in the EU or that could identify a confidential source.
+        </p>
         {error && <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
         <button onClick={generateIdeas} disabled={generating || !brief.trim()}
           className="mt-4 px-8 py-3 bg-purple-600 text-white font-semibold rounded-xl hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2">

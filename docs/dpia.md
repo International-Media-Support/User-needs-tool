@@ -40,7 +40,7 @@ any further risks, are for the assessor.
 
 | # | Risk | Likelihood | Severity | Notes |
 |---|------|-----------|----------|-------|
-| 1 | Content pasted by users is transferred to and processed by a US provider | [FILL] | [FILL] | The most sensitive data the system touches. Users may paste unpublished or personal material. Mitigated by not storing it; transfer basis outstanding. |
+| 1 | Content pasted by users is transferred to and processed by a US provider | [FILL] | [FILL] | The most sensitive data the system touches. Users may paste unpublished or personal material. Transferred under Standard Contractual Clauses; see docs/transfer-impact-assessment.md. Mitigated by sending no identifier with the content, not storing it, TLS, volume caps and in-tool guidance. Residual risk is what users choose to paste, addressed behaviourally. |
 | 2 | Unauthorised access to the database | [FILL] | [FILL] | Pseudonymous only: moodle_user_id and usage counts. No name or email held. |
 | 3 | Re-identification of a user from moodle_user_id | [FILL] | [FILL] | Requires access to Moodle to resolve the identifier. |
 | 4 | LTI signing key compromise leading to impersonation | [FILL] | [FILL] | Key held server-side only; rotation procedure documented. |
@@ -58,8 +58,17 @@ any further risks, are for the assessor.
 ## 6. Outstanding mitigations
 - Lawful basis recorded. [FILL]
 - Privacy notice completed and published. [FILL]
-- DPAs executed with Supabase, Vercel and Anthropic. [FILL]
-- Transfer basis for the US processing documented. [FILL]
+- DPAs executed with Supabase, Vercel, Anthropic and Sentry. [FILL]
+- Sentry (error tracking) added as a processor. EU data region. Receives
+  exception type, message, stack trace, HTTP method, URL path and the internal
+  pseudonymous user UUID. Configured so it cannot receive request bodies,
+  authorisation headers, cookies, query strings or the Moodle user identifier;
+  Session Replay and performance tracing are disabled. Enforced by tests in
+  tests/security.test.ts rather than by configuration alone. Retention period
+  as configured in the Sentry project: [FILL].
+- Transfer basis for the US processing documented: Standard Contractual Clauses,
+  with a transfer impact assessment drafted at docs/transfer-impact-assessment.md.
+  [FILL: legal review and sign-off of that assessment.]
 - Retention period set for usage_daily (six months) and the purge enabled in
   migration 0007. Done.
 - Backups in place: daily encrypted dump, weekly restore verification. Move to Supabase Pro for managed backups and PITR. [FILL: sign-off]

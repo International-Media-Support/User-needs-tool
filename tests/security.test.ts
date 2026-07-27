@@ -85,6 +85,84 @@ describe('restore verification', () => {
   })
 })
 
+describe('sentry cannot capture user content', () => {
+  // Sentry is the one integration that could quietly undo the "pasted content
+  // is never persisted" guarantee, by shipping request bodies to a third
+  // party. These tests encode the guarantee rather than trusting the config.
+
+  it('drops the request body, auth header, cookies and query string', async () => {
+    const { scrubEvent } = await import('../lib/sentry-scrub')
+    const scrubbed = scrubEvent({
+      request: {
+        method: 'POST',
+        url: 'https://app.example.com/api/analyze?code=one-time-handoff-code',
+        data: { text: 'SENSITIVE PASTED CONTENT' },
+        cookies: { session: 'abc' },
+        query_string: 'code=one-time-handoff-code',
+        headers: {
+          authorization: 'Bearer SESSION-TOKEN',
+          cookie: 'session=abc',
+          'content-type': 'application/json',
+        },
+      },
+    })
+
+    const serialised = JSON.stringify(scrubbed)
+    expect(serialised).not.toContain('SENSITIVE PASTED CONTENT')
+    expect(serialised).not.toContain('SESSION-TOKEN')
+    expect(serialised).not.toContain('one-time-handoff-code')
+    expect(scrubbed.request?.data).toBeUndefined()
+    expect(scrubbed.request?.cookies).toBeUndefined()
+    // The safe parts survive, or the tracker would be useless.
+    expect(scrubbed.request?.url).toBe('https://app.example.com/api/analyze')
+    expect(scrubbed.request?.headers?.['content-type']).toBe('application/json')
+  })
+
+  it('keeps only the internal user id, never the Moodle identifier', async () => {
+    const { scrubEvent } = await import('../lib/sentry-scrub')
+    const scrubbed = scrubEvent({
+      user: {
+        id: '550e8400-e29b-41d4-a716-446655440000',
+        username: 'moodle-user-12345',
+        email: 'someone@example.org',
+        ip_address: '203.0.113.4',
+      },
+    })
+    expect(scrubbed.user).toEqual({ id: '550e8400-e29b-41d4-a716-446655440000' })
+  })
+
+  it('drops console breadcrumbs and arbitrary extras', async () => {
+    const { scrubEvent } = await import('../lib/sentry-scrub')
+    const scrubbed = scrubEvent({
+      breadcrumbs: [
+        { category: 'console', message: 'analysing: SENSITIVE PASTED CONTENT' },
+        { category: 'fetch', data: { url: 'https://x.test/a?token=SECRET' } },
+      ],
+      extra: { requestBody: 'SENSITIVE PASTED CONTENT' },
+    })
+    const serialised = JSON.stringify(scrubbed)
+    expect(serialised).not.toContain('SENSITIVE PASTED CONTENT')
+    expect(serialised).not.toContain('SECRET')
+    expect(scrubbed.extra).toBeUndefined()
+    expect(scrubbed.breadcrumbs).toHaveLength(1)
+  })
+
+  it('never enables session replay, which would record the textarea', () => {
+    const client = readSource('sentry.client.config.ts')
+    expect(client).toMatch(/replaysSessionSampleRate:\s*0/)
+    expect(client).toMatch(/replaysOnErrorSampleRate:\s*0/)
+  })
+
+  it('disables PII and local variable capture on every runtime', () => {
+    for (const f of ['sentry.server.config.ts', 'sentry.client.config.ts', 'sentry.edge.config.ts']) {
+      const src = readSource(f)
+      expect(src, `${f} must set sendDefaultPii false`).toMatch(/sendDefaultPii:\s*false/)
+      expect(src, `${f} must scrub events`).toContain('scrubEvent')
+    }
+    expect(readSource('sentry.server.config.ts')).toMatch(/includeLocalVariables:\s*false/)
+  })
+})
+
 describe('security logging', () => {
   it('never logs tokens or submitted content', () => {
     const src = readSource('lib/log.ts')

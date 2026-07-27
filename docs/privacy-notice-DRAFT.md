@@ -17,7 +17,8 @@ data protection: [FILL: DPO / privacy contact].
 - Content you paste for analysis or ideation is sent to our AI provider to
   generate a response. It is not stored in our systems. Our AI provider handles
   it under their own terms. [FILL: state the provider's retention position, and
-  whether a zero-retention arrangement applies.]
+  whether a zero-retention arrangement applies.] See "International transfers"
+  below for where this happens and how it is safeguarded.
 
 ## Why, and our lawful basis
 We process this data to provide the User Needs Tool to authorised Moodle users
@@ -28,11 +29,27 @@ legitimate interests; confirm with legal].
 - Supabase (database hosting).
 - Vercel (application hosting).
 - Anthropic (AI processing of pasted content).
+- Sentry (error tracking, EU region). Receives technical error details only.
+  It is configured so that it cannot receive anything you type into the tool.
 Data processing agreements: [FILL: status].
 
 ## International transfers
-Pasted content is processed by Anthropic in the United States. Transfer
-safeguard: [FILL: e.g. the provider's standard contractual clauses].
+Content you paste for analysis or ideation is sent to our AI provider, Anthropic,
+and processed in the United States. Everything else we hold stays in the EU: our
+database is in Ireland.
+
+This transfer is made under the European Commission's Standard Contractual
+Clauses, which are part of our agreement with the provider. We have also carried
+out a transfer impact assessment, as required, and put additional safeguards in
+place: no name, email or account identifier is sent with your content, so the
+provider receives text with no way to connect it to you, and we do not store the
+content ourselves.
+
+Because your content does leave the EU, please do not paste material that must
+not be transferred outside the EU, or that would identify a confidential source.
+
+[FILL: if the provider is certified under the EU-US Data Privacy Framework,
+state that instead, as it is a simpler basis.]
 
 ## How long we keep it
 - Operational session data is short-lived and purged automatically.

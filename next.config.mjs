@@ -1,3 +1,5 @@
+import { withSentryConfig } from '@sentry/nextjs'
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Security headers. Deliberately no X-Frame-Options / frame-ancestors here:
@@ -22,4 +24,26 @@ const nextConfig = {
   },
 }
 
-export default nextConfig
+// Sentry wraps the build to upload source maps, so stack traces are readable
+// rather than minified. Source maps are uploaded to Sentry and hidden from the
+// public build output, so they are not served to browsers.
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  // Quieter CI logs; the upload still fails loudly if it fails.
+  silent: !process.env.CI,
+
+  // Do not serve source maps to the browser.
+  hideSourceMaps: true,
+
+  // Without an auth token (local dev, forks) the build must still succeed.
+  dryRun: !process.env.SENTRY_AUTH_TOKEN,
+
+  // Routes Sentry's own requests through the app's origin so ad blockers do
+  // not silently drop error reports.
+  tunnelRoute: '/monitoring',
+
+  disableLogger: true,
+})

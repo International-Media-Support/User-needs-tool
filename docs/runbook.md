@@ -48,6 +48,52 @@ Set in Vercel project settings. None are committed.
   public repository are downloadable by anyone. **Interim only; delete once on
   Supabase Pro.** Losing BACKUP_PASSPHRASE makes every backup unrecoverable, so
   store it somewhere durable and separate.
+### Error tracking (Sentry)
+
+- Organisation and project are IMS-owned. Data region: EU.
+- Configured in `sentry.{server,client,edge}.config.ts`. All event scrubbing is
+  in `lib/sentry-scrub.ts`, which works as an allowlist: it rebuilds the risky
+  parts of an event keeping only known-safe fields, so a future Sentry SDK
+  field cannot leak by default.
+- **Deliberately disabled and not to be turned on without a DPIA review:**
+  Session Replay (would record the textarea contents), performance tracing
+  (samples request data), `sendDefaultPii`, and local variable capture (would
+  include the request body of the failing function).
+- What Sentry can see: exception type, message, stack trace, HTTP method, URL
+  path without query string, and the internal user UUID. What it cannot see:
+  request bodies, the Authorization header, cookies, query strings, the Moodle
+  user identifier. Five tests in `tests/security.test.ts` enforce this and fail
+  CI if the configuration regresses.
+- Set `NEXT_PUBLIC_SENTRY_DSN` in Vercel to enable. Leave it unset locally;
+  Sentry disables itself when the DSN is absent.
+- Retention is set in the Sentry project settings, not in code. Record the
+  configured period here when set: [FILL].
+- Sentry is a processor. It is listed in the DPIA and privacy notice.
+
+### Host monitoring
+
+Not applicable, and this is a deliberate position rather than a gap. There are
+no servers: the application runs as managed serverless functions and the
+database is a managed instance, so there is no operating system, no patching
+cycle and no host-level metrics to collect. The provider is responsible for all
+of it. The equivalents that do apply are availability checking (below), error
+tracking (above), database resource review (monthly, in the Supabase
+dashboard) and spend monitoring.
+
+### External uptime monitoring
+
+- `uptime.yml` polls `/api/health` every 6 hours, which means an outage can go
+  unnoticed for up to 6 hours. An external service closes that window to
+  minutes and keeps working even if the Actions quota is exhausted, which the
+  GitHub-based check by definition cannot.
+- Monitor URL: `https://bbc-user-needs.vercel.app/api/health`. It returns 200
+  with `{"status":"ok"}` when healthy and 503 when the database is unreachable,
+  so a plain HTTP status check is sufficient; no keyword matching needed.
+- Alerts go to the shared mailbox, not to an individual. Provider and account
+  owner: [FILL].
+- Keep `uptime.yml` as a second, independent channel. Two checks that fail for
+  different reasons are worth more than one.
+
 - `anomaly-check.yml`: reads security_events_daily each morning at 06:00 and
   reports (event, route) pairs whose count exceeded either the absolute floor
   or a multiple of their own trailing 14-day baseline. Detection logic is in
