@@ -49,7 +49,10 @@ function Analyser({ sessionToken, onUse }: { sessionToken: string; onUse: (remai
 
       if (data.remaining !== undefined) onUse(data.remaining)
 
-      const raw = data.content[0].text.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '')
+      if (data.stop_reason === 'max_tokens') { setError('The response was cut off. Please try again.'); return }
+      const textBlock = data.content?.find((b: any) => b.type === 'text')
+      if (!textBlock) { setError('No usable response was returned. Please try again.'); return }
+      const raw = textBlock.text.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '')
       const parsed = JSON.parse(raw)
 
       const chartData = USER_NEEDS.map(need => {
@@ -192,7 +195,10 @@ function StoryIdeation({ sessionToken, onUse }: { sessionToken: string; onUse: (
 
       if (data.remaining !== undefined) onUse(data.remaining)
 
-      const raw = data.content[0].text.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '')
+      if (data.stop_reason === 'max_tokens') { setError('The response was cut off. Please try again.'); return }
+      const textBlock = data.content?.find((b: any) => b.type === 'text')
+      if (!textBlock) { setError('No usable response was returned. Please try again.'); return }
+      const raw = textBlock.text.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '')
       setIdeas(JSON.parse(raw))
     } catch (err: any) {
       setError(`Generation failed: ${err.message}`)
